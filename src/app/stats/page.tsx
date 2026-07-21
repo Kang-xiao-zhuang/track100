@@ -5,6 +5,8 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useGoalStore } from "@/store/goal.store";
 import { categoryLabel } from "@/lib/goal-meta";
 import { byCategory, dailyCounts, overview, streak } from "@/utils/stats";
+import { achievements } from "@/utils/achievements";
+import { cn } from "@/lib/cn";
 
 export default function StatsPage() {
   const hydrated = useGoalStore((s) => s.hydrated);
@@ -15,6 +17,7 @@ export default function StatsPage() {
   const st = useMemo(() => streak(history), [history]);
   const cats = useMemo(() => byCategory(goals).map((c) => ({ name: categoryLabel(c.category), count: c.count })), [goals]);
   const daily = useMemo(() => dailyCounts(history, 30), [history]);
+  const badges = useMemo(() => achievements(goals, history), [goals, history]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
 
@@ -55,6 +58,27 @@ export default function StatsPage() {
               <Bar dataKey="count" fill="rgb(var(--primary))" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </section>
+
+      <section className="mt-6 pb-4">
+        <h2 className="mb-2 text-sm font-semibold text-text-secondary">成就</h2>
+        <div className="grid grid-cols-2 gap-3">
+          {badges.map((b) => (
+            <div
+              key={b.id}
+              className={cn(
+                "flex items-center gap-3 rounded-card border p-3.5",
+                b.unlocked ? "border-primary/40 bg-primary/5" : "border-border bg-surface opacity-60",
+              )}
+            >
+              <span className={cn("text-3xl", !b.unlocked && "grayscale")}>{b.icon}</span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-semibold text-text-primary">{b.title}</div>
+                <div className="truncate text-xs text-text-secondary">{b.desc}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </main>

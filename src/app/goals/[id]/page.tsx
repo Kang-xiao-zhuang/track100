@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Minus, Pencil, Plus, Trash2 } from "lucide-react";
+import { Minus, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { categoryLabel, unitLabel } from "@/lib/goal-meta";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/cn";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProgressView } from "@/components/progress/progress-view";
 import { Confetti } from "@/components/common/confetti";
+import { drawShareCard } from "@/lib/share-card";
 import type { GrowthMode } from "@/types/goal";
 
 const MODES: { value: GrowthMode; label: string }[] = [
@@ -73,6 +74,18 @@ export default function GoalDetailPage() {
     setCustom("");
   };
 
+  const onShare = async () => {
+    const blob = await drawShareCard(goal);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `track100-${goal.title}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  };
+
   return (
     <main className="min-h-screen pb-16">
       {celebrate && <Confetti />}
@@ -80,9 +93,14 @@ export default function GoalDetailPage() {
         title={goal.title}
         back
         action={
-          <Link href={`/create?edit=${goal.id}`} aria-label="编辑" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50">
-            <Pencil size={18} />
-          </Link>
+          <div className="flex items-center gap-1">
+            <button onClick={onShare} aria-label="分享" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50">
+              <Share2 size={18} />
+            </button>
+            <Link href={`/create?edit=${goal.id}`} aria-label="编辑" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50">
+              <Pencil size={18} />
+            </Link>
+          </div>
         }
       />
 

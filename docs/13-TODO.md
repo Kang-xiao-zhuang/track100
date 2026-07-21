@@ -69,7 +69,9 @@ Version 1.0
 
 - [x] 基础动画(Framer Motion:环/格子/进度条/页面过渡)
 - [x] Responsive(Mobile First,PC 居中 480)
-- [ ] 成就徽章 / 分享卡 / Confetti(v1.1)
+- [x] Confetti(完成撒花)
+- [x] 成就徽章(统计页,数据推导)
+- [x] 分享卡(纯 canvas PNG,含点亮格子)
 - [ ] Performance / A11y 复查
 
 ---
