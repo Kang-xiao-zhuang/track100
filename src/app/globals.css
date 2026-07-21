@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens — see docs/04-DESIGN-SYSTEM.md. RGB triplets so Tailwind can apply alpha. */
+:root {
+  --primary: 85 107 47; /* #556B2F olive */
+  --primary-hover: 101 123 58;
+  --background: 248 245 238; /* #F8F5EE warm paper */
+  --surface: 255 253 248;
+  --border: 230 225 215;
+  --text-primary: 44 44 44;
+  --text-secondary: 119 119 119;
+  --success: 107 191 89;
+  --warning: 230 162 60;
+  --danger: 231 76 60;
+}
+
+.dark {
+  /* Gray scale, never pure black (design system rule). */
+  --primary: 154 168 106; /* lightened olive for contrast */
+  --primary-hover: 168 182 120;
+  --background: 24 24 27;
+  --surface: 39 39 42;
+  --border: 63 63 70;
+  --text-primary: 244 244 245;
+  --text-secondary: 161 161 170;
+  --success: 107 191 89;
+  --warning: 230 162 60;
+  --danger: 231 76 60;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background-color: rgb(var(--background));
+  color: rgb(var(--text-primary));
+  font-family: Inter, "Noto Sans SC", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide scrollbars on the horizontal chip row while keeping scroll. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
