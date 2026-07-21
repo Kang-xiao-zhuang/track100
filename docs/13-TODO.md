@@ -42,8 +42,8 @@ Version 1.0
 - [x] Ring View
 - [x] Bar View
 - [x] 打卡(±步长 / 自定义)+ 历史记录
-- [ ] Tree View(v1.1)
-- [ ] Heatmap View(v1.1)
+- [x] Tree View(v1.1,成长树)
+- [x] Heatmap View(v1.1,热力图)
 
 ---
 

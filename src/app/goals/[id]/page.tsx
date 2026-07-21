@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Minus, Pencil, Plus, Trash2 } from "lucide-react";
@@ -11,12 +11,15 @@ import { fmt, isComplete, percent, remaining } from "@/utils/progress";
 import { cn } from "@/lib/cn";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProgressView } from "@/components/progress/progress-view";
+import { Confetti } from "@/components/common/confetti";
 import type { GrowthMode } from "@/types/goal";
 
 const MODES: { value: GrowthMode; label: string }[] = [
   { value: "grid", label: "格子" },
   { value: "ring", label: "圆环" },
   { value: "bar", label: "进度条" },
+  { value: "tree", label: "成长树" },
+  { value: "heatmap", label: "热力图" },
 ];
 
 export default function GoalDetailPage() {
@@ -30,6 +33,20 @@ export default function GoalDetailPage() {
   const mode = useSettingsStore((s) => s.growthMode);
   const setMode = useSettingsStore((s) => s.setGrowthMode);
   const [custom, setCustom] = useState("");
+  const [celebrate, setCelebrate] = useState(false);
+
+  // Fire confetti the moment a check-in crosses into 100%.
+  const done = !!goal && isComplete(goal);
+  const prevDone = useRef(false);
+  useEffect(() => {
+    if (done && !prevDone.current) {
+      setCelebrate(true);
+      prevDone.current = true;
+      const t = setTimeout(() => setCelebrate(false), 1800);
+      return () => clearTimeout(t);
+    }
+    if (!done) prevDone.current = false;
+  }, [done]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
   if (!goal) {
@@ -41,7 +58,6 @@ export default function GoalDetailPage() {
     );
   }
 
-  const done = isComplete(goal);
   const records = historyOf(goal.id);
 
   const onDelete = () => {
@@ -59,6 +75,7 @@ export default function GoalDetailPage() {
 
   return (
     <main className="min-h-screen pb-16">
+      {celebrate && <Confetti />}
       <PageHeader
         title={goal.title}
         back
@@ -102,7 +119,7 @@ export default function GoalDetailPage() {
 
         {/* the progress view */}
         <div className="mt-5 rounded-card border border-border bg-surface p-5">
-          <ProgressView current={goal.current} total={goal.target} color={goal.color} mode={mode} />
+          <ProgressView current={goal.current} total={goal.target} color={goal.color} mode={mode} history={records} />
         </div>
 
         {/* check-in controls */}
