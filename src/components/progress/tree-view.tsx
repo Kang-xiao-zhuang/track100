@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { percent } from "@/utils/progress";
+import { useT } from "@/lib/i18n";
 
 interface TreeViewProps {
   current: number;
@@ -11,14 +12,15 @@ interface TreeViewProps {
 
 // Growth stages by completion — the goal literally grows as you progress.
 const STAGES = [
-  { min: 0, emoji: "🌱", label: "幼苗" },
-  { min: 20, emoji: "🌿", label: "抽芽" },
-  { min: 45, emoji: "🌳", label: "成长" },
-  { min: 75, emoji: "🌲", label: "茁壮" },
-  { min: 100, emoji: "🌲🌳🌲", label: "成林" },
+  { min: 0, emoji: "🌱", key: "tree.seed" },
+  { min: 20, emoji: "🌿", key: "tree.sprout" },
+  { min: 45, emoji: "🌳", key: "tree.grow" },
+  { min: 75, emoji: "🌲", key: "tree.strong" },
+  { min: 100, emoji: "🌲🌳🌲", key: "tree.forest" },
 ];
 
 export function TreeView({ current, total, color }: TreeViewProps) {
+  const { t } = useT();
   const p = percent(current, total);
   const stage = [...STAGES].reverse().find((s) => p >= s.min) ?? STAGES[0];
   const next = STAGES.find((s) => s.min > p);
@@ -26,7 +28,7 @@ export function TreeView({ current, total, color }: TreeViewProps) {
   return (
     <div className="flex flex-col items-center gap-3 py-6">
       <motion.div
-        key={stage.label}
+        key={stage.key}
         initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, damping: 16 }}
@@ -34,7 +36,7 @@ export function TreeView({ current, total, color }: TreeViewProps) {
       >
         {stage.emoji}
       </motion.div>
-      <div className="text-lg font-semibold text-text-primary">{stage.label}</div>
+      <div className="text-lg font-semibold text-text-primary">{t(stage.key)}</div>
       <div className="text-3xl font-bold" style={{ color }}>
         {p}%
       </div>
@@ -48,7 +50,7 @@ export function TreeView({ current, total, color }: TreeViewProps) {
         />
       </div>
       <div className="text-xs text-text-secondary">
-        {next ? `再 ${next.min - p}% 长成「${next.label}」` : "已长成森林 🎉"}
+        {next ? t("tree.next", { n: next.min - p, label: t(next.key) }) : t("tree.done")}
       </div>
     </div>
   );

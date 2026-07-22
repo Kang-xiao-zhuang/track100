@@ -9,6 +9,7 @@ interface SettingsState extends Settings {
   hydrate: () => void;
   toggleTheme: () => void;
   setGrowthMode: (mode: GrowthMode) => void;
+  toggleLanguage: () => void;
 }
 
 function apply(theme: Settings["theme"]) {
@@ -41,5 +42,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setGrowthMode: (growthMode) => {
     set({ growthMode });
     save({ theme: get().theme, growthMode, language: get().language });
+  },
+
+  toggleLanguage: () => {
+    const language = get().language === "zh" ? "en" : "zh";
+    set({ language });
+    save({ theme: get().theme, growthMode: get().growthMode, language });
   },
 }));

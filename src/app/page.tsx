@@ -7,22 +7,24 @@ import { useGoalStore } from "@/store/goal.store";
 import { CATEGORIES } from "@/lib/goal-meta";
 import { cellsLit } from "@/utils/progress";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import { GoalCard } from "@/components/goal/goal-card";
 import type { GoalCategory } from "@/types/goal";
 
-function greeting(): string {
+function greetKey(): string {
   const h = new Date().getHours();
-  if (h < 6) return "夜深了";
-  if (h < 12) return "早上好";
-  if (h < 14) return "中午好";
-  if (h < 18) return "下午好";
-  return "晚上好";
+  if (h < 6) return "greet.dawn";
+  if (h < 12) return "greet.morning";
+  if (h < 14) return "greet.noon";
+  if (h < 18) return "greet.afternoon";
+  return "greet.evening";
 }
 
 export default function HomePage() {
   const hydrated = useGoalStore((s) => s.hydrated);
   const goals = useGoalStore((s) => s.goals);
   const history = useGoalStore((s) => s.history);
+  const { t } = useT();
   const [filter, setFilter] = useState<GoalCategory | "all">("all");
 
   const active = useMemo(() => goals.filter((g) => !g.archived), [goals]);
@@ -31,19 +33,19 @@ export default function HomePage() {
   const visible = filter === "all" ? active : active.filter((g) => g.category === filter);
   const usedCategories = CATEGORIES.filter((c) => active.some((g) => g.category === c.value));
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
+  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 
   return (
     <main className="px-5 pt-6">
       {/* Progress-first hero */}
-      <p className="text-sm text-text-secondary">{greeting()} 👋</p>
+      <p className="text-sm text-text-secondary">{t(greetKey())} 👋</p>
       <h1 className="mt-2 text-base text-text-secondary">
-        你已点亮
+        {t("home.heroPrefix")}
         <span className="mx-2 text-4xl font-bold text-primary">{litCells}</span>
-        个格子
+        {t("home.heroSuffix")}
       </h1>
       <p className="mt-1 text-sm text-text-secondary">
-        {active.length} 个目标 · 累计打卡 {checkIns} 次
+        {t("home.summary", { goals: active.length, checkins: checkIns })}
       </p>
 
       {active.length === 0 ? (
@@ -52,11 +54,11 @@ export default function HomePage() {
         <>
           {/* Category filter */}
           <div className="no-scrollbar -mx-5 mt-6 flex gap-2 overflow-x-auto px-5 pb-1">
-            <Chip label="全部" active={filter === "all"} onClick={() => setFilter("all")} />
+            <Chip label={t("all")} active={filter === "all"} onClick={() => setFilter("all")} />
             {usedCategories.map((c) => (
               <Chip
                 key={c.value}
-                label={`${c.emoji} ${c.label}`}
+                label={`${c.emoji} ${t("cat." + c.value)}`}
                 active={filter === c.value}
                 onClick={() => setFilter(c.value)}
               />
@@ -101,16 +103,17 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 }
 
 function EmptyState() {
+  const { t } = useT();
   return (
     <div className="mt-24 flex flex-col items-center text-center">
       <div className="text-6xl">🌱</div>
-      <h2 className="mt-4 text-lg font-semibold text-text-primary">开始你的第一段旅程</h2>
-      <p className="mt-1 text-sm text-text-secondary">创建一个长期目标,把成长变得看得见。</p>
+      <h2 className="mt-4 text-lg font-semibold text-text-primary">{t("empty.title")}</h2>
+      <p className="mt-1 text-sm text-text-secondary">{t("empty.sub")}</p>
       <Link
         href="/create"
         className="mt-6 rounded-btn bg-primary px-6 py-3 font-semibold text-white shadow-card active:scale-95"
       >
-        创建目标
+        {t("createGoal")}
       </Link>
     </div>
   );

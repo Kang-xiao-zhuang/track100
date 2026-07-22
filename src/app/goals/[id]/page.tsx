@@ -6,21 +6,21 @@ import Link from "next/link";
 import { Minus, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
-import { categoryLabel, unitLabel } from "@/lib/goal-meta";
 import { fmt, isComplete, percent, remaining } from "@/utils/progress";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProgressView } from "@/components/progress/progress-view";
 import { Confetti } from "@/components/common/confetti";
 import { drawShareCard } from "@/lib/share-card";
 import type { GrowthMode } from "@/types/goal";
 
-const MODES: { value: GrowthMode; label: string }[] = [
-  { value: "grid", label: "格子" },
-  { value: "ring", label: "圆环" },
-  { value: "bar", label: "进度条" },
-  { value: "tree", label: "成长树" },
-  { value: "heatmap", label: "热力图" },
+const MODES: { value: GrowthMode; key: string }[] = [
+  { value: "grid", key: "mode.grid" },
+  { value: "ring", key: "mode.ring" },
+  { value: "bar", key: "mode.bar" },
+  { value: "tree", key: "mode.tree" },
+  { value: "heatmap", key: "mode.heatmap" },
 ];
 
 export default function GoalDetailPage() {
@@ -33,6 +33,7 @@ export default function GoalDetailPage() {
   const deleteGoal = useGoalStore((s) => s.deleteGoal);
   const mode = useSettingsStore((s) => s.growthMode);
   const setMode = useSettingsStore((s) => s.setGrowthMode);
+  const { t, lang } = useT();
   const [custom, setCustom] = useState("");
   const [celebrate, setCelebrate] = useState(false);
 
@@ -49,12 +50,12 @@ export default function GoalDetailPage() {
     if (!done) prevDone.current = false;
   }, [done]);
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
+  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
   if (!goal) {
     return (
       <main className="p-6">
-        <PageHeader title="目标不存在" back />
-        <p className="mt-8 text-center text-text-secondary">这个目标可能已被删除。</p>
+        <PageHeader title={t("d.notFound")} back />
+        <p className="mt-8 text-center text-text-secondary">{t("d.notFoundSub")}</p>
       </main>
     );
   }
@@ -62,7 +63,7 @@ export default function GoalDetailPage() {
   const records = historyOf(goal.id);
 
   const onDelete = () => {
-    if (window.confirm(`确定删除「${goal.title}」?此操作不可撤销。`)) {
+    if (window.confirm(t("d.confirmDelete", { title: goal.title }))) {
       deleteGoal(goal.id);
       router.push("/");
     }
@@ -75,7 +76,7 @@ export default function GoalDetailPage() {
   };
 
   const onShare = async () => {
-    const blob = await drawShareCard(goal);
+    const blob = await drawShareCard(goal, lang);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -112,25 +113,30 @@ export default function GoalDetailPage() {
             {percent(goal.current, goal.target)}%
           </span>
           <span className="text-text-secondary">
-            {fmt(goal.current)} / {fmt(goal.target)} {unitLabel(goal.unit)}
+            {fmt(goal.current)} / {fmt(goal.target)} {t("u." + goal.unit)}
           </span>
         </div>
         <div className="mt-1 text-sm text-text-secondary">
-          {categoryLabel(goal.category)} · {done ? <span className="text-success">已完成 🎉</span> : `还差 ${fmt(remaining(goal))} ${unitLabel(goal.unit)}`}
+          {t("cat." + goal.category)} ·{" "}
+          {done ? (
+            <span className="text-success">{t("d.doneTag")}</span>
+          ) : (
+            t("left.remaining", { n: fmt(remaining(goal)), unit: t("u." + goal.unit) })
+          )}
         </div>
 
         {/* view switch */}
-        <div className="mt-5 flex gap-2">
+        <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto">
           {MODES.map((m) => (
             <button
               key={m.value}
               onClick={() => setMode(m.value)}
               className={cn(
-                "rounded-full border px-4 py-1.5 text-sm font-medium",
+                "shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium",
                 mode === m.value ? "border-primary bg-primary text-white" : "border-border bg-surface text-text-secondary",
               )}
             >
-              {m.label}
+              {t(m.key)}
             </button>
           ))}
         </div>
@@ -153,7 +159,7 @@ export default function GoalDetailPage() {
             onClick={() => addProgress(goal.id, goal.step)}
             className="flex h-12 flex-1 items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95"
           >
-            <Plus size={20} /> 打卡 +{fmt(goal.step)} {unitLabel(goal.unit)}
+            <Plus size={20} /> {t("d.checkin", { step: fmt(goal.step), unit: t("u." + goal.unit) })}
           </button>
         </div>
         <div className="mt-3 flex items-center gap-2">
@@ -162,11 +168,11 @@ export default function GoalDetailPage() {
             onChange={(e) => setCustom(e.target.value)}
             type="number"
             step="any"
-            placeholder="自定义数值"
+            placeholder={t("d.customPh")}
             className="h-11 flex-1 rounded-input border border-border bg-surface px-4 outline-none focus:border-primary"
           />
           <button onClick={addCustom} className="h-11 rounded-btn border border-primary px-5 font-medium text-primary active:scale-95">
-            记录
+            {t("record")}
           </button>
         </div>
 
@@ -176,14 +182,14 @@ export default function GoalDetailPage() {
         )}
 
         {/* history */}
-        <h2 className="mt-8 text-sm font-semibold text-text-secondary">打卡记录</h2>
+        <h2 className="mt-8 text-sm font-semibold text-text-secondary">{t("d.history")}</h2>
         <div className="mt-2 flex flex-col gap-2">
-          {records.length === 0 && <p className="text-sm text-text-secondary">还没有记录,点上面打卡开始吧。</p>}
+          {records.length === 0 && <p className="text-sm text-text-secondary">{t("d.noRecords")}</p>}
           {records.slice(0, 30).map((r) => (
             <div key={r.id} className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-2.5 text-sm">
               <span className={r.value >= 0 ? "font-medium text-success" : "font-medium text-danger"}>
                 {r.value > 0 ? "+" : ""}
-                {fmt(r.value)} {unitLabel(goal.unit)}
+                {fmt(r.value)} {t("u." + goal.unit)}
               </span>
               <span className="text-text-secondary">{r.createdAt.slice(0, 16).replace("T", " ")}</span>
             </div>
@@ -192,7 +198,7 @@ export default function GoalDetailPage() {
 
         {/* delete */}
         <button onClick={onDelete} className="mt-8 flex items-center justify-center gap-2 rounded-btn py-3 text-sm text-danger">
-          <Trash2 size={16} /> 删除目标
+          <Trash2 size={16} /> {t("d.delete")}
         </button>
       </div>
     </main>

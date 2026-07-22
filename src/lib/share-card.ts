@@ -1,6 +1,6 @@
 import type { Goal } from "@/types/goal";
 import { cellsLit, fmt, percent } from "@/utils/progress";
-import { unitLabel } from "@/lib/goal-meta";
+import { translate, type Lang } from "@/lib/i18n";
 
 function darken(hex: string, f: number): string {
   const h = hex.replace("#", "");
@@ -11,7 +11,7 @@ function darken(hex: string, f: number): string {
 }
 
 /** Pure-canvas share card (no deps, no tainted tiles). Returns a PNG blob. */
-export async function drawShareCard(goal: Goal): Promise<Blob> {
+export async function drawShareCard(goal: Goal, lang: Lang = "zh"): Promise<Blob> {
   const W = 1080;
   const H = 1350;
   const c = document.createElement("canvas");
@@ -41,7 +41,7 @@ export async function drawShareCard(goal: Goal): Promise<Blob> {
 
   ctx.font = "400 40px system-ui, sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.fillText(`${fmt(goal.current)} / ${fmt(goal.target)} ${unitLabel(goal.unit)}`, W / 2, 570);
+  ctx.fillText(`${fmt(goal.current)} / ${fmt(goal.target)} ${translate(lang, "u." + goal.unit)}`, W / 2, 570);
 
   // 10x10 lit grid — the brand
   const lit = cellsLit(goal.current, goal.target);

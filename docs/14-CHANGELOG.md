@@ -24,13 +24,15 @@
 
 ---
 
-## v1.1.0 (Planned)
+## v1.1.0 — 2026-07-22 (Shipped)
 
-- Tree / Heatmap 成长视图(新增 Renderer,不改数据)
-- 成就徽章(First Goal / 100% / 10 Goals / 100 Records)
-- 分享卡片 + 完成时 Confetti 动画
-- 中英双语
-- shadcn/ui 组件层
+- Tree / Heatmap 成长视图(新增 Renderer,零改数据层 —— 验证策略模式)
+- 完成时 Confetti 撒花(纯 Framer Motion)
+- 成就徽章(启程 / 首次达成 / 七日之约 / 多线并进 / 百次坚持,数据实时推导)
+- 分享卡(纯 canvas PNG,含点亮格子,随语言)
+- 中英双语 i18n(设置里一键切换,词典 + useT 钩子 + {参数} 插值)
+
+**未做(移至后续)**:shadcn/ui 组件层
 
 ---
 

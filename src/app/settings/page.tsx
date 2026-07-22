@@ -1,17 +1,20 @@
 "use client";
 
 import { useRef } from "react";
-import { Download, Moon, Sun, Upload } from "lucide-react";
+import { Download, Globe, Moon, Sun, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
+import { useT } from "@/lib/i18n";
 
 export default function SettingsPage() {
   const hydrated = useSettingsStore((s) => s.hydrated);
   const theme = useSettingsStore((s) => s.theme);
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
+  const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { t, lang } = useT();
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
+  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 
   const onExport = () => {
     const data = {
@@ -51,28 +54,35 @@ export default function SettingsPage() {
 
   return (
     <main className="px-5 pt-6">
-      <h1 className="text-xl font-bold">设置</h1>
+      <h1 className="text-xl font-bold">{t("set.title")}</h1>
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row
-          label="外观"
-          value={theme === "dark" ? "深色" : "浅色"}
+          label={t("set.appearance")}
+          value={theme === "dark" ? t("set.dark") : t("set.light")}
           icon={theme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
           onClick={toggleTheme}
         />
         <Divider />
-        <Row label="导出数据" icon={<Download size={18} />} onClick={onExport} />
+        <Row
+          label={t("set.language")}
+          value={lang === "zh" ? "中文" : "English"}
+          icon={<Globe size={18} />}
+          onClick={toggleLanguage}
+        />
         <Divider />
-        <Row label="导入数据" icon={<Upload size={18} />} onClick={() => fileRef.current?.click()} />
+        <Row label={t("set.export")} icon={<Download size={18} />} onClick={onExport} />
+        <Divider />
+        <Row label={t("set.import")} icon={<Upload size={18} />} onClick={() => fileRef.current?.click()} />
       </section>
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
-        <Row label="关于 Track100" value="Every hour counts" />
+        <Row label={t("set.about")} value={t("set.aboutSub")} />
         <Divider />
-        <Row label="版本" value="v1.0.0" />
+        <Row label={t("set.version")} value="v1.1.0" />
       </section>
 
-      <p className="mt-6 text-center text-xs text-text-secondary">数据仅保存在本机浏览器,记得定期导出备份。</p>
+      <p className="mt-6 text-center text-xs text-text-secondary">{t("set.footer")}</p>
 
       <input
         ref={fileRef}

@@ -61,7 +61,7 @@ Version 1.0
 - [x] Dark Mode
 - [x] Export
 - [x] Import
-- [ ] i18n 中英双语(v1.1)
+- [x] i18n 中英双语(v1.1,设置里一键切换)
 
 ---
 

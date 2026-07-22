@@ -1,6 +1,7 @@
 "use client";
 
 import type { ProgressRecord } from "@/types/goal";
+import { useT } from "@/lib/i18n";
 
 interface HeatmapViewProps {
   records: ProgressRecord[];
@@ -10,6 +11,7 @@ interface HeatmapViewProps {
 
 /** GitHub-style contribution grid built from this goal's check-in history. */
 export function HeatmapView({ records, color, days = 91 }: HeatmapViewProps) {
+  const { t } = useT();
   // count check-ins per day
   const counts = new Map<string, number>();
   for (const r of records) {
@@ -45,13 +47,13 @@ export function HeatmapView({ records, color, days = 91 }: HeatmapViewProps) {
         ))}
       </div>
       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-        <span>少</span>
+        <span>{t("heat.less")}</span>
         {[0.4, 0.7, 1].map((o) => (
           <span key={o} className="h-3 w-3 rounded-[3px]" style={{ backgroundColor: color, opacity: o }} />
         ))}
-        <span>多</span>
+        <span>{t("heat.more")}</span>
       </div>
-      <div className="text-xs text-text-secondary">最近 {days} 天</div>
+      <div className="text-xs text-text-secondary">{t("heat.recent", { n: days })}</div>
     </div>
   );
 }

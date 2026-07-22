@@ -8,14 +8,16 @@ import { z } from "zod";
 import { useGoalStore } from "@/store/goal.store";
 import { CATEGORIES, COLORS, GOAL_ICONS, UNITS } from "@/lib/goal-meta";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
 
+// zod messages are i18n KEYS, resolved to text at display time.
 const schema = z.object({
-  title: z.string().min(1, "请填写目标名称").max(40),
+  title: z.string().min(1, "err.name").max(40),
   category: z.enum(["learning", "health", "work", "life", "finance", "fitness", "other"]),
   unit: z.enum(["hours", "days", "books", "times", "km", "pages", "custom"]),
-  target: z.coerce.number().positive("目标值需大于 0"),
-  step: z.coerce.number().positive("步长需大于 0"),
+  target: z.coerce.number().positive("err.target"),
+  step: z.coerce.number().positive("err.step"),
   icon: z.string().min(1),
   color: z.string().min(1),
   description: z.string().max(200).optional(),
@@ -36,6 +38,7 @@ function CreateForm() {
   const editId = params.get("edit");
   const { getGoal, createGoal, updateGoal } = useGoalStore();
   const editing = editId ? getGoal(editId) : undefined;
+  const { t } = useT();
 
   const { register, handleSubmit, watch, setValue, reset, formState } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -74,13 +77,13 @@ function CreateForm() {
 
   return (
     <main className="min-h-screen">
-      <PageHeader title={editing ? "编辑目标" : "新建目标"} back />
+      <PageHeader title={editing ? t("create.edit") : t("create.new")} back />
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5 px-5 pb-28 pt-2">
-        <Field label="目标名称" error={formState.errors.title?.message}>
-          <input {...register("title")} placeholder="例如:阅读 100 本书" className={inputCls} />
+        <Field label={t("f.name")} error={formState.errors.title && t(formState.errors.title.message!)}>
+          <input {...register("title")} placeholder={t("f.namePh")} className={inputCls} />
         </Field>
 
-        <Field label="图标">
+        <Field label={t("f.icon")}>
           <div className="flex flex-wrap gap-2">
             {GOAL_ICONS.map((ic) => (
               <button
@@ -95,7 +98,7 @@ function CreateForm() {
           </div>
         </Field>
 
-        <Field label="颜色">
+        <Field label={t("f.color")}>
           <div className="flex flex-wrap gap-3">
             {COLORS.map((c) => (
               <button
@@ -110,39 +113,39 @@ function CreateForm() {
           </div>
         </Field>
 
-        <Field label="分类">
+        <Field label={t("f.category")}>
           <div className="flex flex-wrap gap-2">
             {CATEGORIES.map((c) => (
               <Selectable key={c.value} active={category === c.value} onClick={() => setValue("category", c.value)}>
-                {c.emoji} {c.label}
+                {c.emoji} {t("cat." + c.value)}
               </Selectable>
             ))}
           </div>
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="目标值" error={formState.errors.target?.message}>
+          <Field label={t("f.target")} error={formState.errors.target && t(formState.errors.target.message!)}>
             <input type="number" step="any" {...register("target")} className={inputCls} />
           </Field>
-          <Field label="单位">
+          <Field label={t("f.unit")}>
             <select {...register("unit")} className={inputCls} value={unit} onChange={(e) => setValue("unit", e.target.value as FormValues["unit"])}>
               {UNITS.map((u) => (
-                <option key={u.value} value={u.value}>{u.label}</option>
+                <option key={u.value} value={u.value}>{t("u." + u.value)}</option>
               ))}
             </select>
           </Field>
         </div>
 
-        <Field label="每次打卡 +" error={formState.errors.step?.message}>
+        <Field label={t("f.step")} error={formState.errors.step && t(formState.errors.step.message!)}>
           <input type="number" step="any" {...register("step")} className={inputCls} />
         </Field>
 
-        <Field label="描述(可选)">
-          <textarea {...register("description")} rows={3} className={cn(inputCls, "resize-none")} placeholder="为什么想完成它?" />
+        <Field label={t("f.desc")}>
+          <textarea {...register("description")} rows={3} className={cn(inputCls, "resize-none")} placeholder={t("f.descPh")} />
         </Field>
 
         <button type="submit" className="mt-2 h-12 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95">
-          {editing ? "保存" : "创建目标"}
+          {editing ? t("save") : t("createGoal")}
         </button>
       </form>
     </main>

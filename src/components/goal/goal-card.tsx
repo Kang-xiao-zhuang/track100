@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Goal } from "@/types/goal";
-import { categoryLabel, unitLabel } from "@/lib/goal-meta";
 import { percent, remaining, fmt } from "@/utils/progress";
+import { useT } from "@/lib/i18n";
 import { ProgressRing } from "@/components/progress/progress-ring";
 
 export function GoalCard({ goal }: { goal: Goal }) {
+  const { t } = useT();
   const p = percent(goal.current, goal.target);
   const left = remaining(goal);
   return (
@@ -28,11 +29,15 @@ export function GoalCard({ goal }: { goal: Goal }) {
             </span>
           </div>
           <div className="mt-0.5 text-sm text-text-secondary">
-            {fmt(goal.current)} / {fmt(goal.target)} {unitLabel(goal.unit)}
+            {fmt(goal.current)} / {fmt(goal.target)} {t("u." + goal.unit)}
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
-            <span className="rounded-full bg-border/50 px-2 py-0.5">{categoryLabel(goal.category)}</span>
-            {left > 0 ? <span>还差 {fmt(left)} {unitLabel(goal.unit)}</span> : <span className="text-success">已完成 ✓</span>}
+            <span className="rounded-full bg-border/50 px-2 py-0.5">{t("cat." + goal.category)}</span>
+            {left > 0 ? (
+              <span>{t("left.remaining", { n: fmt(left), unit: t("u." + goal.unit) })}</span>
+            ) : (
+              <span className="text-success">{t("left.done")}</span>
+            )}
           </div>
         </div>
       </Link>

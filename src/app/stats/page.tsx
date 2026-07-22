@@ -3,40 +3,41 @@
 import { useMemo } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { useGoalStore } from "@/store/goal.store";
-import { categoryLabel } from "@/lib/goal-meta";
 import { byCategory, dailyCounts, overview, streak } from "@/utils/stats";
 import { achievements } from "@/utils/achievements";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n";
 
 export default function StatsPage() {
   const hydrated = useGoalStore((s) => s.hydrated);
   const goals = useGoalStore((s) => s.goals);
   const history = useGoalStore((s) => s.history);
 
+  const { t } = useT();
   const ov = useMemo(() => overview(goals, history), [goals, history]);
   const st = useMemo(() => streak(history), [history]);
-  const cats = useMemo(() => byCategory(goals).map((c) => ({ name: categoryLabel(c.category), count: c.count })), [goals]);
+  const cats = useMemo(() => byCategory(goals).map((c) => ({ name: t("cat." + c.category), count: c.count })), [goals, t]);
   const daily = useMemo(() => dailyCounts(history, 30), [history]);
   const badges = useMemo(() => achievements(goals, history), [goals, history]);
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">载入中…</div>;
+  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 
   return (
     <main className="px-5 pt-6">
-      <h1 className="text-xl font-bold">统计</h1>
+      <h1 className="text-xl font-bold">{t("stats.title")}</h1>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <StatCard label="目标总数" value={ov.totalGoals} />
-        <StatCard label="已完成" value={ov.completedGoals} />
-        <StatCard label="连续打卡" value={`${st} 天`} />
-        <StatCard label="累计打卡" value={`${ov.totalRecords} 次`} />
+        <StatCard label={t("stats.totalGoals")} value={ov.totalGoals} />
+        <StatCard label={t("stats.completed")} value={ov.completedGoals} />
+        <StatCard label={t("stats.streak")} value={`${st} ${t("unit.days")}`} />
+        <StatCard label={t("stats.records")} value={ov.totalRecords} />
       </div>
 
-      <StatCard className="mt-3" label="完成率" value={`${ov.completionRate}%`} big />
+      <StatCard className="mt-3" label={t("stats.rate")} value={`${ov.completionRate}%`} big />
 
       {cats.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold text-text-secondary">分类分布</h2>
+          <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.catDist")}</h2>
           <div className="rounded-card border border-border bg-surface p-4">
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={cats}>
@@ -50,7 +51,7 @@ export default function StatsPage() {
       )}
 
       <section className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold text-text-secondary">近 30 天打卡</h2>
+        <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.last30")}</h2>
         <div className="rounded-card border border-border bg-surface p-4">
           <ResponsiveContainer width="100%" height={140}>
             <BarChart data={daily}>
@@ -62,7 +63,7 @@ export default function StatsPage() {
       </section>
 
       <section className="mt-6 pb-4">
-        <h2 className="mb-2 text-sm font-semibold text-text-secondary">成就</h2>
+        <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.achievements")}</h2>
         <div className="grid grid-cols-2 gap-3">
           {badges.map((b) => (
             <div
@@ -74,8 +75,8 @@ export default function StatsPage() {
             >
               <span className={cn("text-3xl", !b.unlocked && "grayscale")}>{b.icon}</span>
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-text-primary">{b.title}</div>
-                <div className="truncate text-xs text-text-secondary">{b.desc}</div>
+                <div className="truncate text-sm font-semibold text-text-primary">{t(`b.${b.id}.t`)}</div>
+                <div className="truncate text-xs text-text-secondary">{t(`b.${b.id}.d`)}</div>
               </div>
             </div>
           ))}
