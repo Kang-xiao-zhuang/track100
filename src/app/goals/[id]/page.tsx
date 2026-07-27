@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Minus, Pencil, Plus, Share2, Trash2 } from "lucide-react";
@@ -50,6 +50,9 @@ export default function GoalDetailPage() {
     if (!done) prevDone.current = false;
   }, [done]);
 
+  // 必须在任何提前 return 之前调用(遵守 Hooks 规则);goal 为空时兜底空数组。
+  const records = useMemo(() => (goal ? historyOf(goal.id) : []), [historyOf, goal]);
+
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
   if (!goal) {
     return (
@@ -59,8 +62,6 @@ export default function GoalDetailPage() {
       </main>
     );
   }
-
-  const records = historyOf(goal.id);
 
   const onDelete = () => {
     if (window.confirm(t("d.confirmDelete", { title: goal.title }))) {

@@ -51,3 +51,20 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ── Performance-optimized CSS animations (replacing Framer Motion per-element) ── */
+
+@keyframes cell-appear {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ring-initial {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

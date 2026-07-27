@@ -30,8 +30,8 @@ export default function HomePage() {
   const active = useMemo(() => goals.filter((g) => !g.archived), [goals]);
   const litCells = useMemo(() => active.reduce((sum, g) => sum + cellsLit(g.current, g.target), 0), [active]);
   const checkIns = useMemo(() => history.filter((r) => r.value > 0).length, [history]);
-  const visible = filter === "all" ? active : active.filter((g) => g.category === filter);
-  const usedCategories = CATEGORIES.filter((c) => active.some((g) => g.category === c.value));
+  const visible = useMemo(() => filter === "all" ? active : active.filter((g) => g.category === filter), [filter, active]);
+  const usedCategories = useMemo(() => CATEGORIES.filter((c) => active.some((g) => g.category === c.value)), [active]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 

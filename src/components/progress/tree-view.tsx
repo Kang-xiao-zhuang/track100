@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 import { percent } from "@/utils/progress";
 import { useT } from "@/lib/i18n";
 
@@ -19,34 +19,34 @@ const STAGES = [
   { min: 100, emoji: "🌲🌳🌲", key: "tree.forest" },
 ];
 
+/** Growth tree — CSS animation replaces Framer Motion for stage transitions and bar fill. */
 export function TreeView({ current, total, color }: TreeViewProps) {
   const { t } = useT();
   const p = percent(current, total);
   const stage = [...STAGES].reverse().find((s) => p >= s.min) ?? STAGES[0];
   const next = STAGES.find((s) => s.min > p);
 
+  // Render width=0 first, then transition to p% — mimics Framer Motion initial/animate.
+  const [width, setWidth] = useState(0);
+  useEffect(() => { setWidth(p); }, [p]);
+
   return (
     <div className="flex flex-col items-center gap-3 py-6">
-      <motion.div
+      <div
         key={stage.key}
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 200, damping: 16 }}
         className="text-6xl"
+        style={{ animation: "fade-up 0.4s both" }}
       >
         {stage.emoji}
-      </motion.div>
+      </div>
       <div className="text-lg font-semibold text-text-primary">{t(stage.key)}</div>
       <div className="text-3xl font-bold" style={{ color }}>
         {p}%
       </div>
       <div className="h-2 w-48 overflow-hidden rounded-full bg-border/50">
-        <motion.div
+        <div
           className="h-full rounded-full"
-          style={{ backgroundColor: color }}
-          initial={{ width: 0 }}
-          animate={{ width: `${p}%` }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+          style={{ backgroundColor: color, width: `${width}%`, transition: "width 0.6s ease-out" }}
         />
       </div>
       <div className="text-xs text-text-secondary">

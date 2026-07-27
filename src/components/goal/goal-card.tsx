@@ -1,18 +1,20 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import type { Goal } from "@/types/goal";
 import { percent, remaining, fmt } from "@/utils/progress";
 import { useT } from "@/lib/i18n";
 import { ProgressRing } from "@/components/progress/progress-ring";
+import type { Goal } from "@/types/goal";
 
-export function GoalCard({ goal }: { goal: Goal }) {
+/** Goal card — memoized to skip re-renders when sibling cards change.
+ *  Entrance uses CSS animation (GPU-composited) instead of Framer Motion. */
+export const GoalCard = memo(function GoalCard({ goal }: { goal: Goal }) {
   const { t } = useT();
   const p = percent(goal.current, goal.target);
   const left = remaining(goal);
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+    <div style={{ animation: "fade-up 0.3s both" }}>
       <Link
         href={`/goals/${goal.id}`}
         className="flex items-center gap-4 rounded-card border border-border bg-surface p-5 shadow-card transition-shadow hover:shadow-hover"
@@ -41,6 +43,6 @@ export function GoalCard({ goal }: { goal: Goal }) {
           </div>
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
-}
+});
