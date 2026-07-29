@@ -7,6 +7,7 @@ import { Minus, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { fmt, isComplete, percent, remaining } from "@/utils/progress";
+import { pace, formatDate } from "@/utils/pace";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
@@ -37,21 +38,24 @@ export default function GoalDetailPage() {
   const [custom, setCustom] = useState("");
   const [celebrate, setCelebrate] = useState(false);
 
-  // Fire confetti the moment a check-in crosses into 100%.
+  // Celebrate whenever a check-in crosses a milestone (25/50/75/100%).
   const done = !!goal && isComplete(goal);
-  const prevDone = useRef(false);
+  const pNow = goal ? percent(goal.current, goal.target) : 0;
+  const prevPct = useRef<number | null>(null);
   useEffect(() => {
-    if (done && !prevDone.current) {
+    const prev = prevPct.current;
+    const crossed = prev !== null && pNow > prev && [25, 50, 75, 100].some((m) => prev < m && pNow >= m);
+    prevPct.current = pNow;
+    if (crossed) {
       setCelebrate(true);
-      prevDone.current = true;
-      const t = setTimeout(() => setCelebrate(false), 1800);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setCelebrate(false), 1800);
+      return () => clearTimeout(timer);
     }
-    if (!done) prevDone.current = false;
-  }, [done]);
+  }, [pNow]);
 
   // 必须在任何提前 return 之前调用(遵守 Hooks 规则);goal 为空时兜底空数组。
   const records = useMemo(() => (goal ? historyOf(goal.id) : []), [historyOf, goal]);
+  const forecast = useMemo(() => (goal ? pace(goal, records) : null), [goal, records]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
   if (!goal) {
@@ -146,6 +150,39 @@ export default function GoalDetailPage() {
         <div className="mt-5 rounded-card border border-border bg-surface p-5">
           <ProgressView current={goal.current} total={goal.target} color={goal.color} mode={mode} history={records} />
         </div>
+
+        {/* pace / projection */}
+        {!done && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-4 py-3 text-sm">
+            {forecast && forecast.projectedDate ? (
+              <>
+                <span className="text-text-secondary">
+                  📅 {t("pace.projected", { date: formatDate(forecast.projectedDate, lang) })}
+                </span>
+                {forecast.aheadDays != null && (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold",
+                      forecast.aheadDays > 0
+                        ? "bg-success/15 text-success"
+                        : forecast.aheadDays < 0
+                          ? "bg-danger/15 text-danger"
+                          : "bg-border/50 text-text-secondary",
+                    )}
+                  >
+                    {forecast.aheadDays > 0
+                      ? t("pace.ahead", { n: forecast.aheadDays })
+                      : forecast.aheadDays < 0
+                        ? t("pace.behind", { n: -forecast.aheadDays })
+                        : t("pace.ontime")}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-text-secondary">📅 {t("pace.none")}</span>
+            )}
+          </div>
+        )}
 
         {/* check-in controls */}
         <div className="mt-5 flex items-center gap-3">

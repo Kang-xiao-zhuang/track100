@@ -20,6 +20,7 @@ const schema = z.object({
   step: z.coerce.number().positive("err.step"),
   icon: z.string().min(1),
   color: z.string().min(1),
+  endDate: z.string().optional(),
   description: z.string().max(200).optional(),
 });
 type FormValues = z.infer<typeof schema>;
@@ -55,6 +56,7 @@ function CreateForm() {
         step: editing.step,
         icon: editing.icon,
         color: editing.color,
+        endDate: editing.endDate,
         description: editing.description,
       });
     }
@@ -138,6 +140,10 @@ function CreateForm() {
 
         <Field label={t("f.step")} error={formState.errors.step && t(formState.errors.step.message!)}>
           <input type="number" step="any" {...register("step")} className={inputCls} />
+        </Field>
+
+        <Field label={t("f.endDate")}>
+          <input type="date" {...register("endDate")} className={inputCls} />
         </Field>
 
         <Field label={t("f.desc")}>

@@ -8,8 +8,12 @@ import { CATEGORIES } from "@/lib/goal-meta";
 import { cellsLit } from "@/utils/progress";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+import { readJSON, STORAGE_KEYS } from "@/lib/storage";
 import { GoalCard } from "@/components/goal/goal-card";
 import type { GoalCategory } from "@/types/goal";
+
+const DAY = 86400000;
+const BACKUP_DAYS = 14;
 
 function greetKey(): string {
   const h = new Date().getHours();
@@ -26,6 +30,7 @@ export default function HomePage() {
   const history = useGoalStore((s) => s.history);
   const { t } = useT();
   const [filter, setFilter] = useState<GoalCategory | "all">("all");
+  const [backupDismissed, setBackupDismissed] = useState(false);
 
   const active = useMemo(() => goals.filter((g) => !g.archived), [goals]);
   const litCells = useMemo(() => active.reduce((sum, g) => sum + cellsLit(g.current, g.target), 0), [active]);
@@ -34,6 +39,11 @@ export default function HomePage() {
   const usedCategories = useMemo(() => CATEGORIES.filter((c) => active.some((g) => g.category === c.value)), [active]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+
+  const lastExport = readJSON<number>(STORAGE_KEYS.lastExport, 0);
+  const backupDays = lastExport ? Math.floor((Date.now() - lastExport) / DAY) : null;
+  const showBackup =
+    !backupDismissed && active.length > 0 && (lastExport === 0 || (backupDays !== null && backupDays >= BACKUP_DAYS));
 
   return (
     <main className="px-5 pt-6">
@@ -47,6 +57,17 @@ export default function HomePage() {
       <p className="mt-1 text-sm text-text-secondary">
         {t("home.summary", { goals: active.length, checkins: checkIns })}
       </p>
+
+      {showBackup && (
+        <div className="mt-4 flex items-center gap-2 rounded-card border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm">
+          <Link href="/settings" className="flex-1 font-medium text-warning">
+            {lastExport === 0 ? t("backup.never") : t("backup.warn", { n: backupDays! })}
+          </Link>
+          <button aria-label="dismiss" onClick={() => setBackupDismissed(true)} className="text-warning/70">
+            ✕
+          </button>
+        </div>
+      )}
 
       {active.length === 0 ? (
         <EmptyState />

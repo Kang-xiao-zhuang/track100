@@ -45,6 +45,8 @@ export interface Settings {
   theme: "light" | "dark";
   growthMode: GrowthMode;
   language: "zh" | "en";
+  reminderEnabled: boolean;
+  reminderTime: string; // "HH:MM",每日提醒时间
 }
 
 export interface Achievement {

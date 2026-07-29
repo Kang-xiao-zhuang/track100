@@ -2,7 +2,13 @@ import { create } from "zustand";
 import type { GrowthMode, Settings } from "@/types/goal";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 
-const DEFAULTS: Settings = { theme: "light", growthMode: "grid", language: "zh" };
+const DEFAULTS: Settings = {
+  theme: "light",
+  growthMode: "grid",
+  language: "zh",
+  reminderEnabled: false,
+  reminderTime: "20:00",
+};
 
 interface SettingsState extends Settings {
   hydrated: boolean;
@@ -10,43 +16,52 @@ interface SettingsState extends Settings {
   toggleTheme: () => void;
   setGrowthMode: (mode: GrowthMode) => void;
   toggleLanguage: () => void;
+  setReminder: (enabled: boolean, time?: string) => void;
 }
 
-function apply(theme: Settings["theme"]) {
+function applyTheme(theme: Settings["theme"]) {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-function save(s: Settings) {
-  writeJSON(STORAGE_KEYS.settings, s);
-}
+export const useSettingsStore = create<SettingsState>((set, get) => {
+  // 把当前全部设置写回 localStorage(避免某个动作漏掉新增字段)
+  const persist = () => {
+    const { theme, growthMode, language, reminderEnabled, reminderTime } = get();
+    writeJSON<Settings>(STORAGE_KEYS.settings, { theme, growthMode, language, reminderEnabled, reminderTime });
+  };
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
-  ...DEFAULTS,
-  hydrated: false,
+  return {
+    ...DEFAULTS,
+    hydrated: false,
 
-  hydrate: () => {
-    if (get().hydrated) return;
-    const s = readJSON<Settings>(STORAGE_KEYS.settings, DEFAULTS);
-    set({ ...s, hydrated: true });
-    apply(s.theme);
-  },
+    hydrate: () => {
+      if (get().hydrated) return;
+      const s = readJSON<Settings>(STORAGE_KEYS.settings, DEFAULTS);
+      set({ ...DEFAULTS, ...s, hydrated: true });
+      applyTheme(s.theme ?? DEFAULTS.theme);
+    },
 
-  toggleTheme: () => {
-    const theme = get().theme === "dark" ? "light" : "dark";
-    set({ theme });
-    apply(theme);
-    save({ theme, growthMode: get().growthMode, language: get().language });
-  },
+    toggleTheme: () => {
+      const theme = get().theme === "dark" ? "light" : "dark";
+      set({ theme });
+      applyTheme(theme);
+      persist();
+    },
 
-  setGrowthMode: (growthMode) => {
-    set({ growthMode });
-    save({ theme: get().theme, growthMode, language: get().language });
-  },
+    setGrowthMode: (growthMode) => {
+      set({ growthMode });
+      persist();
+    },
 
-  toggleLanguage: () => {
-    const language = get().language === "zh" ? "en" : "zh";
-    set({ language });
-    save({ theme: get().theme, growthMode: get().growthMode, language });
-  },
-}));
+    toggleLanguage: () => {
+      set({ language: get().language === "zh" ? "en" : "zh" });
+      persist();
+    },
+
+    setReminder: (enabled, time) => {
+      set({ reminderEnabled: enabled, ...(time ? { reminderTime: time } : {}) });
+      persist();
+    },
+  };
+});

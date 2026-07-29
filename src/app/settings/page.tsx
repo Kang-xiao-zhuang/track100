@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Download, Globe, Moon, Sun, Upload } from "lucide-react";
+import { Bell, Download, Globe, Moon, Sun, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import { useT } from "@/lib/i18n";
@@ -11,10 +11,27 @@ export default function SettingsPage() {
   const theme = useSettingsStore((s) => s.theme);
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
   const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
+  const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
+  const reminderTime = useSettingsStore((s) => s.reminderTime);
+  const setReminder = useSettingsStore((s) => s.setReminder);
   const fileRef = useRef<HTMLInputElement>(null);
   const { t, lang } = useT();
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+
+  const toggleReminder = async () => {
+    if (!reminderEnabled) {
+      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        await Notification.requestPermission();
+      }
+      setReminder(true);
+    } else {
+      setReminder(false);
+    }
+  };
+
+  const notifDenied =
+    reminderEnabled && typeof Notification !== "undefined" && Notification.permission === "denied";
 
   const onExport = () => {
     const data = {
@@ -35,6 +52,7 @@ export default function SettingsPage() {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+    writeJSON(STORAGE_KEYS.lastExport, Date.now()); // 记录备份时间,清掉首页提醒
   };
 
   const onImport = async (file: File) => {
@@ -71,6 +89,28 @@ export default function SettingsPage() {
           onClick={toggleLanguage}
         />
         <Divider />
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <span className="text-text-secondary"><Bell size={18} /></span>
+          <span className="flex-1 text-text-primary">{t("set.reminder")}</span>
+          {reminderEnabled && (
+            <input
+              type="time"
+              value={reminderTime}
+              onChange={(e) => setReminder(true, e.target.value)}
+              className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-text-primary outline-none"
+            />
+          )}
+          <button
+            role="switch"
+            aria-checked={reminderEnabled}
+            onClick={toggleReminder}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${reminderEnabled ? "bg-primary" : "bg-border"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${reminderEnabled ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
+        {notifDenied && <p className="px-4 pb-3 text-xs text-danger">{t("set.reminderDenied")}</p>}
+        <Divider />
         <Row label={t("set.export")} icon={<Download size={18} />} onClick={onExport} />
         <Divider />
         <Row label={t("set.import")} icon={<Upload size={18} />} onClick={() => fileRef.current?.click()} />
@@ -79,7 +119,7 @@ export default function SettingsPage() {
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row label={t("set.about")} value={t("set.aboutSub")} />
         <Divider />
-        <Row label={t("set.version")} value="v1.1.0" />
+        <Row label={t("set.version")} value="v1.2.0" />
       </section>
 
       <p className="mt-6 text-center text-xs text-text-secondary">{t("set.footer")}</p>

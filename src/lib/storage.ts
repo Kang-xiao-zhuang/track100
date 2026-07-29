@@ -6,6 +6,8 @@ export const STORAGE_KEYS = {
   history: "track100-history",
   settings: "track100-settings",
   achievements: "track100-achievements",
+  lastExport: "track100-last-export",
+  lastRemind: "track100-last-remind",
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {
