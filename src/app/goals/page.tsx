@@ -8,6 +8,7 @@ import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { fmt, isComplete, percent, remaining } from "@/utils/progress";
 import { pace, formatDate } from "@/utils/pace";
+import { formatDateTime } from "@/utils/date";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
@@ -38,7 +39,8 @@ function GoalDetail() {
   const router = useRouter();
   const hydrated = useGoalStore((s) => s.hydrated);
   const goal = useGoalStore((s) => s.goals.find((g) => g.id === id));
-  const historyOf = useGoalStore((s) => s.historyOf);
+  // byGoal 索引返回稳定引用:只有本目标新增/删除记录时才变
+  const records = useGoalStore((s) => s.historyOf(id ?? ""));
   const addProgress = useGoalStore((s) => s.addProgress);
   const deleteGoal = useGoalStore((s) => s.deleteGoal);
   const mode = useSettingsStore((s) => s.growthMode);
@@ -62,8 +64,7 @@ function GoalDetail() {
     }
   }, [pNow]);
 
-  // 必须在任何提前 return 之前调用(遵守 Hooks 规则);goal 为空时兜底空数组。
-  const records = useMemo(() => (goal ? historyOf(goal.id) : []), [historyOf, goal]);
+  // 必须在任何提前 return 之前调用(遵守 Hooks 规则)。
   const forecast = useMemo(() => (goal ? pace(goal, records) : null), [goal, records]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
@@ -231,7 +232,7 @@ function GoalDetail() {
                 {r.value > 0 ? "+" : ""}
                 {fmt(r.value)} {t("u." + goal.unit)}
               </span>
-              <span className="text-text-secondary">{r.createdAt.slice(0, 16).replace("T", " ")}</span>
+              <span className="text-text-secondary">{formatDateTime(r.createdAt)}</span>
             </div>
           ))}
         </div>

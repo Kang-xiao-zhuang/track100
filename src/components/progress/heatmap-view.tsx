@@ -2,6 +2,7 @@
 
 import type { ProgressRecord } from "@/types/goal";
 import { useT } from "@/lib/i18n";
+import { dayKey } from "@/utils/date";
 
 interface HeatmapViewProps {
   records: ProgressRecord[];
@@ -16,7 +17,7 @@ export function HeatmapView({ records, color, days = 91 }: HeatmapViewProps) {
   const counts = new Map<string, number>();
   for (const r of records) {
     if (r.value <= 0) continue;
-    const key = r.createdAt.slice(0, 10);
+    const key = dayKey(r.createdAt);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
@@ -25,7 +26,7 @@ export function HeatmapView({ records, color, days = 91 }: HeatmapViewProps) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = dayKey(d);
     cells.push({ key, count: counts.get(key) ?? 0 });
   }
 

@@ -1,5 +1,6 @@
 import type { Goal, GoalCategory, ProgressRecord } from "@/types/goal";
 import { isComplete } from "@/utils/progress";
+import { dayKey } from "@/utils/date";
 
 export interface Overview {
   totalGoals: number;
@@ -38,13 +39,13 @@ export function dailyCounts(history: ProgressRecord[], days = 30): { date: strin
   const bucket = new Map<string, number>();
   for (const r of history) {
     if (r.value <= 0) continue; // only count check-ins
-    const key = r.createdAt.slice(0, 10);
+    const key = dayKey(r.createdAt);
     bucket.set(key, (bucket.get(key) ?? 0) + 1);
   }
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = dayKey(d);
     out.push({ date: key.slice(5), count: bucket.get(key) ?? 0 });
   }
   return out;
@@ -52,16 +53,15 @@ export function dailyCounts(history: ProgressRecord[], days = 30): { date: strin
 
 /** Consecutive days (ending today or yesterday) with at least one check-in. */
 export function streak(history: ProgressRecord[]): number {
-  const days = new Set(history.filter((r) => r.value > 0).map((r) => r.createdAt.slice(0, 10)));
+  const days = new Set(history.filter((r) => r.value > 0).map((r) => dayKey(r.createdAt)));
   if (days.size === 0) return 0;
   const cursor = new Date();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  if (!days.has(iso(cursor))) {
+  if (!days.has(dayKey(cursor))) {
     cursor.setDate(cursor.getDate() - 1);
-    if (!days.has(iso(cursor))) return 0;
+    if (!days.has(dayKey(cursor))) return 0;
   }
   let n = 0;
-  while (days.has(iso(cursor))) {
+  while (days.has(dayKey(cursor))) {
     n++;
     cursor.setDate(cursor.getDate() - 1);
   }

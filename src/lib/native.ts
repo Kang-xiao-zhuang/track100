@@ -1,7 +1,56 @@
 // Web ↔ Android(Capacitor)差异的唯一出口:组件只调这里,不直接判断平台。
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 
 export const isNative = () => Capacitor.isNativePlatform();
+
+/** 把异步注册的插件监听包装成同步的取消函数(给 useEffect 的 cleanup 用)。 */
+function listen(register: () => Promise<PluginListenerHandle>): () => void {
+  if (!isNative()) return () => {};
+  const handle = register();
+  return () => {
+    handle.then((h) => h.remove());
+  };
+}
+
+/**
+ * Android 系统返回键:首页退出 App;其它页面能后退就后退,否则回首页。
+ * (没有用户手势的 pushState —— 比如快捷打卡跳进详情页 —— WebView 会认为不能后退。)
+ * 返回取消监听函数。
+ */
+export function handleBackButton(goHome: () => void): () => void {
+  return listen(async () => {
+    const { App } = await import("@capacitor/app");
+    return App.addListener("backButton", ({ canGoBack }) => {
+      if (window.location.pathname === "/") App.exitApp();
+      else if (canGoBack) window.history.back();
+      else goHome();
+    });
+  });
+}
+
+// 本地原生插件,见 android/.../ShortcutsPlugin.java
+export interface ShortcutItem {
+  id: string;
+  shortLabel: string;
+  longLabel: string;
+  icon: string;
+  color: string;
+}
+interface ShortcutsPlugin {
+  set(options: { items: ShortcutItem[] }): Promise<void>;
+  addListener(event: "checkin", cb: (data: { goalId: string }) => void): Promise<PluginListenerHandle>;
+}
+const Shortcuts = registerPlugin<ShortcutsPlugin>("Shortcuts");
+
+/** 更新桌面长按图标出现的快捷打卡列表。 */
+export async function setShortcuts(items: ShortcutItem[]): Promise<void> {
+  if (isNative()) await Shortcuts.set({ items });
+}
+
+/** 监听快捷打卡;App 冷启动时的那次点击也会在注册后送达。返回取消监听函数。 */
+export function onShortcutCheckin(cb: (goalId: string) => void): () => void {
+  return listen(() => Shortcuts.addListener("checkin", ({ goalId }) => cb(goalId)));
+}
 
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

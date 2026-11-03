@@ -5,6 +5,7 @@ import { Bell, Download, Globe, Moon, Sun, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import { useT } from "@/lib/i18n";
+import { dayKey } from "@/utils/date";
 import { isNative, saveFile } from "@/lib/native";
 
 export default function SettingsPage() {
@@ -47,7 +48,7 @@ export default function SettingsPage() {
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     try {
-      await saveFile(blob, `track100-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      await saveFile(blob, `track100-backup-${dayKey(new Date())}.json`);
     } catch {
       return; // 用户取消分享 / 写入失败 —— 不算已备份
     }
@@ -118,7 +119,7 @@ export default function SettingsPage() {
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row label={t("set.about")} value={t("set.aboutSub")} />
         <Divider />
-        <Row label={t("set.version")} value="v1.2.0" />
+        <Row label={t("set.version")} value={`v${process.env.NEXT_PUBLIC_APP_VERSION}`} />
       </section>
 
       <p className="mt-6 text-center text-xs text-text-secondary">{t("set.footer")}</p>

@@ -31,3 +31,11 @@ export function remaining(goal: Goal): number {
 export function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
+
+/** 快捷打卡候选:未归档、未完成,最近动过的在前。 */
+export function shortcutGoals(goals: Goal[], max = 4): Goal[] {
+  return goals
+    .filter((g) => !g.archived && !isComplete(g))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, max);
+}

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useSettingsStore } from "@/store/settings.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import { translate } from "@/lib/i18n";
+import { dayKey } from "@/utils/date";
 import { cancelDailyReminder, isNative, scheduleDailyReminder } from "@/lib/native";
 
 /**
@@ -42,7 +43,7 @@ export function PwaReminder() {
       const [h, m] = time.split(":").map(Number);
       const due = now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m);
       if (!due) return;
-      const today = now.toISOString().slice(0, 10);
+      const today = dayKey(now);
       if (readJSON<string>(STORAGE_KEYS.lastRemind, "") === today) return; // 今天已提醒
       writeJSON(STORAGE_KEYS.lastRemind, today);
       try {
