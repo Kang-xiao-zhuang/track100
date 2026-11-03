@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Minus, Pencil, Plus, Share2, Trash2 } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ProgressView } from "@/components/progress/progress-view";
 import { Confetti } from "@/components/common/confetti";
 import { drawShareCard } from "@/lib/share-card";
+import { saveFile } from "@/lib/native";
 import type { GrowthMode } from "@/types/goal";
 
 const MODES: { value: GrowthMode; key: string }[] = [
@@ -25,7 +26,15 @@ const MODES: { value: GrowthMode; key: string }[] = [
 ];
 
 export default function GoalDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={null}>
+      <GoalDetail />
+    </Suspense>
+  );
+}
+
+function GoalDetail() {
+  const id = useSearchParams().get("id");
   const router = useRouter();
   const hydrated = useGoalStore((s) => s.hydrated);
   const goal = useGoalStore((s) => s.goals.find((g) => g.id === id));
@@ -82,14 +91,7 @@ export default function GoalDetailPage() {
 
   const onShare = async () => {
     const blob = await drawShareCard(goal, lang);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `track100-${goal.title}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    await saveFile(blob, `track100-${goal.title}.png`);
   };
 
   return (

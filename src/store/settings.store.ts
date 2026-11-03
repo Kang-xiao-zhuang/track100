@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { GrowthMode, Settings } from "@/types/goal";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
+import { syncStatusBar } from "@/lib/native";
 
 const DEFAULTS: Settings = {
   theme: "light",
@@ -22,6 +23,7 @@ interface SettingsState extends Settings {
 function applyTheme(theme: Settings["theme"]) {
   if (typeof document === "undefined") return;
   document.documentElement.classList.toggle("dark", theme === "dark");
+  syncStatusBar(theme).catch(() => {});
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => {

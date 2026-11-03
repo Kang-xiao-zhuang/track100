@@ -100,7 +100,7 @@ const zh: Dict = {
   "set.about": "关于 Track100",
   "set.aboutSub": "Every hour counts",
   "set.version": "版本",
-  "set.footer": "数据仅保存在本机浏览器,记得定期导出备份。",
+  "set.footer": "数据仅保存在本机,记得定期导出备份。",
 
   "cat.learning": "学习", "cat.health": "健康", "cat.fitness": "健身", "cat.work": "工作",
   "cat.life": "生活", "cat.finance": "理财", "cat.other": "其他",
@@ -211,7 +211,7 @@ const en: Dict = {
   "set.about": "About Track100",
   "set.aboutSub": "Every hour counts",
   "set.version": "Version",
-  "set.footer": "Data lives only in this browser — export a backup regularly.",
+  "set.footer": "Data lives only on this device — export a backup regularly.",
 
   "cat.learning": "Learning", "cat.health": "Health", "cat.fitness": "Fitness", "cat.work": "Work",
   "cat.life": "Life", "cat.finance": "Finance", "cat.other": "Other",

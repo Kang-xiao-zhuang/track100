@@ -6,29 +6,39 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "android:sync": "next build && cap sync android",
+    "android:open": "cap open android",
+    "android:apk": "next build && cap sync android && cd android && .\\gradlew.bat assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/core": "^6.2.3",
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/local-notifications": "^6.1.3",
+    "@capacitor/share": "^6.0.4",
+    "@capacitor/status-bar": "^6.0.3",
+    "@hookform/resolvers": "^3.10.0",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^0.469.0",
     "next": "15.1.6",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "zustand": "^5.0.3",
-    "framer-motion": "^11.15.0",
-    "lucide-react": "^0.469.0",
-    "recharts": "^2.15.0",
     "react-hook-form": "^7.54.2",
+    "recharts": "^2.15.0",
+    "tailwind-merge": "^2.6.0",
     "zod": "^3.24.1",
-    "@hookform/resolvers": "^3.10.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
+    "@capacitor/cli": "^6.2.3",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "tailwindcss": "^3.4.17",
+    "autoprefixer": "^10.4.20",
     "postcss": "^8.5.1",
-    "autoprefixer": "^10.4.20"
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
   }
 }

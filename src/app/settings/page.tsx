@@ -5,6 +5,7 @@ import { Bell, Download, Globe, Moon, Sun, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import { useT } from "@/lib/i18n";
+import { isNative, saveFile } from "@/lib/native";
 
 export default function SettingsPage() {
   const hydrated = useSettingsStore((s) => s.hydrated);
@@ -21,7 +22,8 @@ export default function SettingsPage() {
 
   const toggleReminder = async () => {
     if (!reminderEnabled) {
-      if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      // Android 上的权限申请在 PwaReminder 里随定时一起处理
+      if (!isNative() && typeof Notification !== "undefined" && Notification.permission === "default") {
         await Notification.requestPermission();
       }
       setReminder(true);
@@ -31,9 +33,9 @@ export default function SettingsPage() {
   };
 
   const notifDenied =
-    reminderEnabled && typeof Notification !== "undefined" && Notification.permission === "denied";
+    reminderEnabled && !isNative() && typeof Notification !== "undefined" && Notification.permission === "denied";
 
-  const onExport = () => {
+  const onExport = async () => {
     const data = {
       app: "track100",
       version: 1,
@@ -44,14 +46,11 @@ export default function SettingsPage() {
       achievements: readJSON(STORAGE_KEYS.achievements, []),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `track100-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    try {
+      await saveFile(blob, `track100-backup-${new Date().toISOString().slice(0, 10)}.json`);
+    } catch {
+      return; // 用户取消分享 / 写入失败 —— 不算已备份
+    }
     writeJSON(STORAGE_KEYS.lastExport, Date.now()); // 记录备份时间,清掉首页提醒
   };
 

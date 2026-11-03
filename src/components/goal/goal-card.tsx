@@ -16,7 +16,7 @@ export const GoalCard = memo(function GoalCard({ goal }: { goal: Goal }) {
   return (
     <div style={{ animation: "fade-up 0.3s both" }}>
       <Link
-        href={`/goals/${goal.id}`}
+        href={`/goals?id=${goal.id}`}
         className="flex items-center gap-4 rounded-card border border-border bg-surface p-5 shadow-card transition-shadow hover:shadow-hover"
       >
         <ProgressRing value={goal.target ? goal.current / goal.target : 0} size={64} stroke={7} color={goal.color}>
