@@ -1,81 +1,81 @@
 import type { Goal } from "@/types/goal";
 import { cellsLit, fmt, percent } from "@/utils/progress";
 import { translate, type Lang } from "@/lib/i18n";
+import {
+  canvasToPngBlob,
+  createCardCanvas,
+  darken,
+  fitText,
+  normalizeHex,
+  releaseCanvas,
+  roundRect,
+  waitForFonts,
+} from "@/lib/canvas-card";
 
-function darken(hex: string, f: number): string {
-  const raw = hex.replace("#", "");
-  const h = /^[\da-f]{6}$/i.test(raw) ? raw : "556B2F"; // 自定义颜色格式异常时退回品牌色
-  const r = Math.round(parseInt(h.slice(0, 2), 16) * f);
-  const g = Math.round(parseInt(h.slice(2, 4), 16) * f);
-  const b = Math.round(parseInt(h.slice(4, 6), 16) * f);
-  return `rgb(${r},${g},${b})`;
-}
+const FONT = "system-ui, 'Microsoft YaHei', sans-serif";
 
 /** Pure-canvas share card (no deps, no tainted tiles). Returns a PNG blob. */
 export async function drawShareCard(goal: Goal, lang: Lang = "zh"): Promise<Blob> {
+  await waitForFonts(); // 首次分享时中文/emoji 可能还没栅格化
+
   const W = 1080;
   const H = 1350;
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const ctx = c.getContext("2d")!;
+  const { canvas: c, ctx } = createCardCanvas(W, H);
+  const color = normalizeHex(goal.color); // 导入备份里的脏色值不能让 addColorStop 抛异常
 
-  // background gradient from the goal's color
-  const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, goal.color);
-  g.addColorStop(1, darken(goal.color, 0.55));
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  try {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, color);
+    g.addColorStop(1, darken(color, 0.55));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
 
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
 
-  ctx.font = "120px system-ui, sans-serif";
-  ctx.fillText(goal.icon, W / 2, 210);
+    ctx.font = `120px ${FONT}`;
+    ctx.fillText(goal.icon || "🎯", W / 2, 210);
 
-  ctx.font = "700 60px system-ui, 'Microsoft YaHei', sans-serif";
-  ctx.fillText(goal.title, W / 2, 300);
+    ctx.fillText(
+      fitText(ctx, goal.title, W - 120, { size: 60, minSize: 30, weight: 700, family: FONT }),
+      W / 2,
+      300,
+    );
 
-  const p = percent(goal.current, goal.target);
-  ctx.font = "800 180px system-ui, sans-serif";
-  ctx.fillText(`${p}%`, W / 2, 500);
+    ctx.font = `800 180px ${FONT}`;
+    ctx.fillText(`${percent(goal.current, goal.target)}%`, W / 2, 500);
 
-  ctx.font = "400 40px system-ui, sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.fillText(`${fmt(goal.current)} / ${fmt(goal.target)} ${translate(lang, "u." + goal.unit)}`, W / 2, 570);
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    const detail = `${fmt(goal.current)} / ${fmt(goal.target)} ${translate(lang, "u." + goal.unit)}`;
+    ctx.fillText(
+      fitText(ctx, detail, W - 120, { size: 40, minSize: 26, weight: 400, family: FONT }),
+      W / 2,
+      570,
+    );
 
-  // 10x10 lit grid — the brand
-  const lit = cellsLit(goal.current, goal.target);
-  const cols = 10;
-  const cell = 72;
-  const gap = 12;
-  const gridW = cols * cell + (cols - 1) * gap;
-  const x0 = (W - gridW) / 2;
-  const y0 = 660;
-  for (let i = 0; i < 100; i++) {
-    const cx = x0 + (i % cols) * (cell + gap);
-    const cy = y0 + Math.floor(i / cols) * (cell + gap);
-    ctx.fillStyle = i < lit ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.2)";
-    roundRect(ctx, cx, cy, cell, cell, 14);
-    ctx.fill();
+    // 10x10 lit grid — the brand
+    const lit = cellsLit(goal.current, goal.target);
+    const cols = 10;
+    const cell = 72;
+    const gap = 12;
+    const gridW = cols * cell + (cols - 1) * gap;
+    const x0 = (W - gridW) / 2;
+    const y0 = 660;
+    for (let i = 0; i < 100; i++) {
+      const cx = x0 + (i % cols) * (cell + gap);
+      const cy = y0 + Math.floor(i / cols) * (cell + gap);
+      ctx.fillStyle = i < lit ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.2)";
+      roundRect(ctx, cx, cy, cell, cell, 14);
+      ctx.fill();
+    }
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = `600 40px ${FONT}`;
+    ctx.fillText("Track100 · Every hour counts", W / 2, H - 70);
+
+    return await canvasToPngBlob(c);
+  } finally {
+    releaseCanvas(c);
   }
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.font = "600 40px system-ui, sans-serif";
-  ctx.fillText("Track100 · Every hour counts", W / 2, H - 70);
-
-  return await new Promise<Blob>((resolve, reject) => {
-    c.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
-  });
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }

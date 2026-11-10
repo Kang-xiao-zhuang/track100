@@ -60,9 +60,10 @@ export default function SettingsPage() {
   const onExport = async () => {
     const blob = new Blob([JSON.stringify(buildBackup(), null, 2)], { type: "application/json" });
     try {
-      await saveFile(blob, `track100-backup-${dayKey(new Date())}.json`);
+      const result = await saveFile(blob, `track100-backup-${dayKey(new Date())}.json`);
+      if (result === "canceled") return; // 用户取消分享 —— 不算已备份
     } catch {
-      return; // 用户取消分享 / 写入失败 —— 不算已备份
+      return; // 写入/分享失败 —— 不算已备份
     }
     writeJSON(STORAGE_KEYS.lastExport, Date.now()); // 记录备份时间,清掉首页提醒
   };

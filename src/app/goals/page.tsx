@@ -56,6 +56,7 @@ function GoalDetail() {
   const [note, setNote] = useState("");
   const [visibleCount, setVisibleCount] = useState(30);
   const [celebrate, setCelebrate] = useState(false);
+  const [sharing, setSharing] = useState(false);
   // 补打卡:选中日期后,打卡/记录落到该日期;空串 = 关闭
   const [backfillDate, setBackfillDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -123,8 +124,20 @@ function GoalDetail() {
   };
 
   const onShare = async () => {
-    const blob = await drawShareCard(goal, lang);
-    await saveFile(blob, `track100-${goal.title}.png`);
+    if (sharing) return; // 连点会撞上 Share 插件的 isPresenting 锁
+    setSharing(true);
+    try {
+      const blob = await drawShareCard(goal, lang);
+      // 文件名只用 ASCII + goal.id:标题里的 / ? # 空格会让原生写入或 MIME 推断失败
+      await saveFile(blob, `track100-goal-${goal.id}.png`, {
+        title: `${goal.title} · Track100`,
+        dialogTitle: t("share.dialogTitle"),
+      });
+    } catch {
+      window.alert(t("share.failed"));
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -135,8 +148,13 @@ function GoalDetail() {
         back
         action={
           <div className="flex items-center gap-1">
-            <button onClick={onShare} aria-label="分享" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50">
-              <Share2 size={18} />
+            <button
+              onClick={onShare}
+              disabled={sharing}
+              aria-label={sharing ? t("share.generating") : t("share.action")}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50 disabled:opacity-40"
+            >
+              <Share2 size={18} className={sharing ? "animate-pulse" : ""} />
             </button>
             <Link href={`/create?edit=${goal.id}`} aria-label="编辑" className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-border/50">
               <Pencil size={18} />

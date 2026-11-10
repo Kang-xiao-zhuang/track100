@@ -24,6 +24,7 @@ export default function ReviewPage() {
   const history = useGoalStore((s) => s.history);
   const { t, lang } = useT();
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [sharing, setSharing] = useState(false);
 
   const years = useMemo(() => availableYears(goals, history), [goals, history]);
   const r = useMemo(() => buildReview(goals, history, year), [goals, history, year]);
@@ -37,11 +38,19 @@ export default function ReviewPage() {
   const empty = r.checkIns === 0 && r.completed.length === 0;
 
   const onShare = async () => {
+    if (sharing) return; // 连点会撞上 Share 插件的 isPresenting 锁
+    setSharing(true);
     try {
       const blob = await drawReviewCard(r, lang);
-      await saveFile(blob, `track100-review-${r.year}.png`);
+      await saveFile(blob, `track100-review-${r.year}.png`, {
+        title: t("review.cardTitle", { year: r.year }),
+        dialogTitle: t("share.dialogTitle"),
+      });
+      // 用户取消分享由 saveFile 静默处理,不会走到 catch
     } catch {
-      window.alert(t("review.shareFailed"));
+      window.alert(t("share.failed"));
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -53,10 +62,11 @@ export default function ReviewPage() {
         <h1 className="text-xl font-bold">{t("review.title")}</h1>
         <button
           onClick={onShare}
-          aria-label={t("review.share")}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary hover:bg-border/50"
+          disabled={sharing}
+          aria-label={sharing ? t("share.generating") : t("review.share")}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary hover:bg-border/50 disabled:opacity-40"
         >
-          <Share2 size={18} />
+          <Share2 size={18} className={sharing ? "animate-pulse" : ""} />
         </button>
       </header>
 
@@ -201,11 +211,13 @@ export default function ReviewPage() {
 
           <button
             onClick={onShare}
+            disabled={sharing}
             className={cn(
-              "mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95",
+              "mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95 disabled:opacity-60",
             )}
           >
-            <Share2 size={18} /> {t("review.share")}
+            <Share2 size={18} className={sharing ? "animate-pulse" : ""} />
+            {sharing ? t("share.generating") : t("review.share")}
           </button>
         </>
       )}
