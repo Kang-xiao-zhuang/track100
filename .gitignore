@@ -9,3 +9,8 @@ next-env.d.ts
 !.env.example
 /.idea
 /.vscode
+# Playwright 运行产物
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache

@@ -4,9 +4,19 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
+import { useCheckinStore } from "@/store/checkin.store";
 import { translate } from "@/lib/i18n";
-import { handleBackButton, isNative, onShortcutCheckin, setShortcuts } from "@/lib/native";
+import {
+  handleBackButton,
+  isNative,
+  notifyCheckinResult,
+  onNotificationCheckin,
+  onShortcutCheckin,
+  registerCheckinAction,
+  setShortcuts,
+} from "@/lib/native";
 import { fmt, shortcutGoals } from "@/utils/progress";
+import { pickCheckinGoal } from "@/utils/reminder";
 
 /**
  * Android 原生能力接线:系统返回键 + 桌面长按图标的快捷打卡。Web 上什么都不做。
@@ -31,6 +41,42 @@ export function NativeBridge() {
         router.push(`/goals?id=${goal.id}`);
       }),
     [router],
+  );
+
+  // 通知栏动作定义:每次启动(含语言变化)重新注册,保证按钮文案正确
+  useEffect(() => {
+    if (!isNative()) return;
+    void registerCheckinAction(translate(lang, "notify.action"));
+  }, [lang]);
+
+  // 通知栏「打卡 +1」:实时挑一个今天还没打卡的目标,打卡后发确认通知
+  useEffect(
+    () =>
+      onNotificationCheckin(() => {
+        const store = useGoalStore.getState();
+        store.hydrate(); // 冷启动时事件可能先于 AppShell 的 hydrate 到达
+        const goal = pickCheckinGoal(store.goals, store.history);
+        if (!goal) {
+          void notifyCheckinResult(translate(lang, "notify.allDone"));
+          return;
+        }
+        const recordId = store.addProgress(goal.id, goal.step);
+        if (!recordId) return;
+        useCheckinStore.getState().show({
+          goalId: goal.id,
+          recordId,
+          value: goal.step,
+          unit: goal.unit,
+        });
+        void notifyCheckinResult(
+          translate(lang, "notify.done", {
+            title: goal.title,
+            n: fmt(goal.step),
+            unit: translate(lang, "u." + goal.unit),
+          }),
+        );
+      }),
+    [lang],
   );
 
   // 只有快捷方式内容真的变化时才调原生

@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ArrowUpDown, Plus } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { CATEGORIES } from "@/lib/goal-meta";
-import { cellsLit } from "@/utils/progress";
+import { cellsLit, sortGoals } from "@/utils/progress";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { readJSON, STORAGE_KEYS } from "@/lib/storage";
@@ -31,16 +31,19 @@ export default function HomePage() {
   const { t } = useT();
   const [filter, setFilter] = useState<GoalCategory | "all">("all");
   const [backupDismissed, setBackupDismissed] = useState(false);
+  const [sortMode, setSortMode] = useState(false);
+  // 只在挂载时读一次,避免每次 render 都碰 localStorage
+  const [lastExport] = useState(() => readJSON<number>(STORAGE_KEYS.lastExport, 0));
 
-  const active = useMemo(() => goals.filter((g) => !g.archived), [goals]);
+  const active = useMemo(() => goals.filter((g) => !g.archived && !g.deletedAt), [goals]);
+  const ordered = useMemo(() => sortGoals(active), [active]);
   const litCells = useMemo(() => active.reduce((sum, g) => sum + cellsLit(g.current, g.target), 0), [active]);
   const checkIns = useMemo(() => history.filter((r) => r.value > 0).length, [history]);
-  const visible = useMemo(() => filter === "all" ? active : active.filter((g) => g.category === filter), [filter, active]);
+  const visible = useMemo(() => filter === "all" ? ordered : ordered.filter((g) => g.category === filter), [filter, ordered]);
   const usedCategories = useMemo(() => CATEGORIES.filter((c) => active.some((g) => g.category === c.value)), [active]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 
-  const lastExport = readJSON<number>(STORAGE_KEYS.lastExport, 0);
   const backupDays = lastExport ? Math.floor((Date.now() - lastExport) / DAY) : null;
   const showBackup =
     !backupDismissed && active.length > 0 && (lastExport === 0 || (backupDays !== null && backupDays >= BACKUP_DAYS));
@@ -73,8 +76,22 @@ export default function HomePage() {
         <EmptyState />
       ) : (
         <>
+          {/* Sort mode toggle */}
+          <div className="mt-6 flex items-center justify-between gap-2">
+            <span className="text-xs text-text-secondary">{sortMode ? t("home.sortHint") : ""}</span>
+            <button
+              onClick={() => setSortMode((v) => !v)}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
+                sortMode ? "border-primary bg-primary text-white" : "border-border bg-surface text-text-secondary",
+              )}
+            >
+              <ArrowUpDown size={14} /> {sortMode ? t("home.sortDone") : t("home.sort")}
+            </button>
+          </div>
+
           {/* Category filter */}
-          <div className="no-scrollbar -mx-5 mt-6 flex gap-2 overflow-x-auto px-5 pb-1">
+          <div className="no-scrollbar -mx-5 mt-2 flex gap-2 overflow-x-auto px-5 pb-1">
             <Chip label={t("all")} active={filter === "all"} onClick={() => setFilter("all")} />
             {usedCategories.map((c) => (
               <Chip
@@ -89,7 +106,7 @@ export default function HomePage() {
           {/* Goal list */}
           <div className="mt-4 flex flex-col gap-3">
             {visible.map((g) => (
-              <GoalCard key={g.id} goal={g} />
+              <GoalCard key={g.id} goal={g} sortMode={sortMode} />
             ))}
           </div>
         </>

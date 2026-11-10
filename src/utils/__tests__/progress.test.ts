@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellsLit, fmt, isComplete, percent, ratio, remaining, shortcutGoals } from "@/utils/progress";
+import { cellsLit, fmt, isComplete, isHabit, isPinned, percent, ratio, remaining, shortcutGoals, sortGoals } from "@/utils/progress";
 import { makeGoal } from "./fixtures";
 
 describe("progress", () => {
@@ -42,5 +42,25 @@ describe("shortcutGoals", () => {
       makeGoal({ id: "mid", updatedAt: "2026-11-03T00:00:00Z" }),
     ];
     expect(shortcutGoals(goals, 2).map((g) => g.id)).toEqual(["new", "mid"]);
+  });
+});
+
+describe("目标类型与首页排序", () => {
+  it("旧数据(无 type)视为累计型,order 为负表示置顶", () => {
+    expect(isHabit(makeGoal())).toBe(false);
+    expect(isHabit(makeGoal({ type: "habit" }))).toBe(true);
+    expect(isPinned(makeGoal())).toBe(false);
+    expect(isPinned(makeGoal({ order: -1 }))).toBe(true);
+  });
+
+  it("sortGoals 按 order 升序,未设置的保持原顺序(稳定)", () => {
+    const goals = [
+      makeGoal({ id: "a" }),
+      makeGoal({ id: "b", order: 5 }),
+      makeGoal({ id: "c", order: -1 }),
+      makeGoal({ id: "d" }),
+    ];
+    expect(sortGoals(goals).map((g) => g.id)).toEqual(["c", "a", "d", "b"]);
+    expect(goals.map((g) => g.id)).toEqual(["a", "b", "c", "d"]); // 不修改入参
   });
 });

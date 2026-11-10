@@ -3,7 +3,8 @@ import { cellsLit, fmt, percent } from "@/utils/progress";
 import { translate, type Lang } from "@/lib/i18n";
 
 function darken(hex: string, f: number): string {
-  const h = hex.replace("#", "");
+  const raw = hex.replace("#", "");
+  const h = /^[\da-f]{6}$/i.test(raw) ? raw : "556B2F"; // 自定义颜色格式异常时退回品牌色
   const r = Math.round(parseInt(h.slice(0, 2), 16) * f);
   const g = Math.round(parseInt(h.slice(2, 4), 16) * f);
   const b = Math.round(parseInt(h.slice(4, 6), 16) * f);
@@ -64,7 +65,9 @@ export async function drawShareCard(goal: Goal, lang: Lang = "zh"): Promise<Blob
   ctx.font = "600 40px system-ui, sans-serif";
   ctx.fillText("Track100 · Every hour counts", W / 2, H - 70);
 
-  return await new Promise<Blob>((res) => c.toBlob((b) => res(b!), "image/png"));
+  return await new Promise<Blob>((resolve, reject) => {
+    c.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+  });
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

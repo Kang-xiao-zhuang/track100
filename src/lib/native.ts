@@ -94,9 +94,46 @@ export async function syncStatusBar(theme: "light" | "dark"): Promise<void> {
 }
 
 const REMINDER_ID = 1;
+export const CHECKIN_ACTION_TYPE = "TRACK100_CHECKIN";
+export const CHECKIN_ACTION_ID = "quick-checkin";
+
+/**
+ * 注册通知栏「打卡 +1」按钮。动作定义存在原生 SharedPreferences,
+ * 即使 App 未运行,系统展示通知时也能读到;语言变化时重新注册即可更新按钮文案。
+ */
+export async function registerCheckinAction(title: string): Promise<void> {
+  if (!isNative()) return;
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  await LocalNotifications.registerActionTypes({
+    types: [{ id: CHECKIN_ACTION_TYPE, actions: [{ id: CHECKIN_ACTION_ID, title }] }],
+  });
+}
+
+/** 监听通知栏快捷打卡。冷启动时插件会保留事件,直到 JS 侧注册监听后送达。 */
+export function onNotificationCheckin(cb: () => void): () => void {
+  return listen(async () => {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+    return LocalNotifications.addListener("localNotificationActionPerformed", (event) => {
+      if (event.actionId === CHECKIN_ACTION_ID) cb();
+    });
+  });
+}
+
+/** 打卡结果用一条即时通知反馈(用户可能没进 App 界面)。 */
+export async function notifyCheckinResult(body: string): Promise<void> {
+  if (!isNative()) return;
+  try {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+    await LocalNotifications.schedule({
+      notifications: [{ id: Math.floor(Date.now() % 2147483000), title: "Track100", body }],
+    });
+  } catch {
+    // 通知权限被关闭时静默;打卡本身已经落库
+  }
+}
 
 /** Android:用系统本地通知每天定时提醒(App 关闭也会触发)。返回是否获得通知权限。 */
-export async function scheduleDailyReminder(time: string, body: string): Promise<boolean> {
+export async function scheduleDailyReminder(time: string, body: string, actionTitle?: string): Promise<boolean> {
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   let perm = await LocalNotifications.checkPermissions();
   if (perm.display === "prompt" || perm.display === "prompt-with-rationale") {
@@ -104,10 +141,18 @@ export async function scheduleDailyReminder(time: string, body: string): Promise
   }
   await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
   if (perm.display !== "granted") return false;
+  if (actionTitle) await registerCheckinAction(actionTitle);
   const [hour, minute] = time.split(":").map(Number);
   await LocalNotifications.schedule({
     notifications: [
-      { id: REMINDER_ID, title: "Track100", body, schedule: { on: { hour, minute }, allowWhileIdle: true } },
+      {
+        id: REMINDER_ID,
+        title: "Track100",
+        body,
+        schedule: { on: { hour, minute }, allowWhileIdle: true },
+        actionTypeId: actionTitle ? CHECKIN_ACTION_TYPE : undefined,
+        extra: { kind: "daily" },
+      },
     ],
   });
   return true;

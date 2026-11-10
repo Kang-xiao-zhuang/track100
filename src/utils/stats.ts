@@ -11,7 +11,7 @@ export interface Overview {
 }
 
 export function overview(goals: Goal[], history: ProgressRecord[]): Overview {
-  const active = goals.filter((g) => !g.archived);
+  const active = goals.filter((g) => !g.archived && !g.deletedAt);
   const completed = active.filter(isComplete).length;
   return {
     totalGoals: active.length,
@@ -26,7 +26,7 @@ export function overview(goals: Goal[], history: ProgressRecord[]): Overview {
 export function byCategory(goals: Goal[]): { category: GoalCategory; count: number }[] {
   const map = new Map<GoalCategory, number>();
   for (const g of goals) {
-    if (g.archived) continue;
+    if (g.archived || g.deletedAt) continue;
     map.set(g.category, (map.get(g.category) ?? 0) + 1);
   }
   return [...map.entries()].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);

@@ -23,6 +23,24 @@ export function isComplete(goal: Goal): boolean {
   return goal.current >= goal.target;
 }
 
+/** 习惯型目标:按周期打卡,UI 展示连击/坚持率而非百分比。旧数据视为累计型。 */
+export function isHabit(goal: Goal): boolean {
+  return goal.type === "habit";
+}
+
+/** 首页排序:order 升序,未设置的保持原有数组顺序(稳定的 index 兜底)。 */
+export function sortGoals(goals: Goal[]): Goal[] {
+  return goals
+    .map((g, index) => ({ g, index }))
+    .sort((a, b) => (a.g.order ?? 0) - (b.g.order ?? 0) || a.index - b.index)
+    .map(({ g }) => g);
+}
+
+/** 负的 order = 置顶。 */
+export function isPinned(goal: Goal): boolean {
+  return (goal.order ?? 0) < 0;
+}
+
 export function remaining(goal: Goal): number {
   return Math.max(0, goal.target - goal.current);
 }
@@ -35,7 +53,7 @@ export function fmt(n: number): string {
 /** 快捷打卡候选:未归档、未完成,最近动过的在前。 */
 export function shortcutGoals(goals: Goal[], max = 4): Goal[] {
   return goals
-    .filter((g) => !g.archived && !isComplete(g))
+    .filter((g) => !g.archived && !g.deletedAt && !isComplete(g))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, max);
 }

@@ -19,17 +19,31 @@ export function PwaReminder() {
   const time = useSettingsStore((s) => s.reminderTime);
   const lang = useSettingsStore((s) => s.language);
 
-  // 注册 SW(原生 App 不需要)
+  // 注册 SW(原生 App 不需要)。
+  // URL 带构建版本:升版本后浏览器会安装新 SW,activate 清掉旧缓存;
+  // 已在旧 SW 控制下的页面刷新一次,避免继续用旧版 JS。
   useEffect(() => {
-    if (!isNative() && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
+    if (isNative() || !("serviceWorker" in navigator)) return;
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloaded = false;
+    const onControllerChange = () => {
+      if (!hadController || reloaded) return; // 首次安装不刷新
+      reloaded = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+    const version = process.env.NEXT_PUBLIC_APP_VERSION || "dev";
+    navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(version)}`).catch(() => {});
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
   }, []);
 
   // Android:交给系统定时通知
   useEffect(() => {
     if (!hydrated || !isNative()) return;
-    (enabled ? scheduleDailyReminder(time, translate(lang, "remind.body")) : cancelDailyReminder()).catch(() => {});
+    (enabled
+      ? scheduleDailyReminder(time, translate(lang, "remind.body"), translate(lang, "notify.action"))
+      : cancelDailyReminder()
+    ).catch(() => {});
   }, [hydrated, enabled, time, lang]);
 
   // Web:每日提醒轮询

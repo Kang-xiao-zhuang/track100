@@ -6,9 +6,12 @@ import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { PwaReminder } from "@/components/system/pwa-reminder";
 import { NativeBridge } from "@/components/system/native-bridge";
+import { AutoBackup } from "@/components/system/auto-backup";
+import { StorageWarning } from "@/components/system/storage-warning";
+import { CheckinToast } from "@/components/common/checkin-toast";
 import { BottomNav } from "./bottom-nav";
 
-const NAV_ROUTES = ["/", "/stats", "/settings"];
+const NAV_ROUTES = ["/", "/stats", "/review", "/settings"];
 
 // useLayoutEffect on client (sync before paint → no "载入中…" flash),
 // useEffect on server (no-op, avoids SSR warning).
@@ -30,6 +33,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="relative mx-auto min-h-screen max-w-app bg-background shadow-sm">
       <PwaReminder />
       <NativeBridge />
+      <AutoBackup />
+      <CheckinToast />
+      <StorageWarning />
       <div className={showNav ? "pb-24" : ""}>{children}</div>
       {showNav && <BottomNav />}
     </div>

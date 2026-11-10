@@ -22,6 +22,8 @@ const schema = z.object({
   color: z.string().min(1),
   endDate: z.string().optional(),
   description: z.string().max(200).optional(),
+  type: z.enum(["cumulative", "habit"]),
+  habitPeriod: z.enum(["daily", "weekly"]),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -43,7 +45,10 @@ function CreateForm() {
 
   const { register, handleSubmit, watch, setValue, reset, formState } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { category: "learning", unit: "hours", icon: "🎯", color: COLORS[0], step: 1, target: 100 },
+    defaultValues: {
+      category: "learning", unit: "hours", icon: "🎯", color: COLORS[0],
+      step: 1, target: 100, type: "cumulative", habitPeriod: "daily",
+    },
   });
 
   useEffect(() => {
@@ -58,6 +63,8 @@ function CreateForm() {
         color: editing.color,
         endDate: editing.endDate,
         description: editing.description,
+        type: editing.type ?? "cumulative",
+        habitPeriod: editing.habitPeriod ?? "daily",
       });
     }
   }, [editing, reset]);
@@ -66,8 +73,13 @@ function CreateForm() {
   const color = watch("color");
   const category = watch("category");
   const unit = watch("unit");
+  const type = watch("type");
+  const habitPeriod = watch("habitPeriod");
+  const isHabitType = type === "habit";
 
   const onSubmit = (v: FormValues) => {
+    // 目标值调低到低于已完成量时会瞬间「完成」,历史百分比也会失真 —— 先让用户确认
+    if (editing && editing.current > v.target && !window.confirm(t("f.targetWarn", { n: editing.current }))) return;
     if (editing) {
       updateGoal(editing.id, v);
       router.back();
@@ -84,6 +96,33 @@ function CreateForm() {
         <Field label={t("f.name")} error={formState.errors.title && t(formState.errors.title.message!)}>
           <input {...register("title")} placeholder={t("f.namePh")} className={inputCls} />
         </Field>
+
+        <Field label={t("f.type")}>
+          <div className="flex gap-2">
+            <Selectable active={!isHabitType} onClick={() => setValue("type", "cumulative")}>
+              {t("f.typeCumulative")}
+            </Selectable>
+            <Selectable active={isHabitType} onClick={() => setValue("type", "habit")}>
+              {t("f.typeHabit")}
+            </Selectable>
+          </div>
+          <p className="text-xs leading-relaxed text-text-secondary">
+            {isHabitType ? t("f.typeHabitHint") : t("f.typeCumulativeHint")}
+          </p>
+        </Field>
+
+        {isHabitType && (
+          <Field label={t("f.period")}>
+            <div className="flex gap-2">
+              <Selectable active={habitPeriod === "daily"} onClick={() => setValue("habitPeriod", "daily")}>
+                {t("f.periodDaily")}
+              </Selectable>
+              <Selectable active={habitPeriod === "weekly"} onClick={() => setValue("habitPeriod", "weekly")}>
+                {t("f.periodWeekly")}
+              </Selectable>
+            </div>
+          </Field>
+        )}
 
         <Field label={t("f.icon")}>
           <div className="flex flex-wrap gap-2">
@@ -126,7 +165,7 @@ function CreateForm() {
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label={t("f.target")} error={formState.errors.target && t(formState.errors.target.message!)}>
+          <Field label={isHabitType ? t("f.targetHabit") : t("f.target")} error={formState.errors.target && t(formState.errors.target.message!)}>
             <input type="number" step="any" {...register("target")} className={inputCls} />
           </Field>
           <Field label={t("f.unit")}>

@@ -1,12 +1,16 @@
 "use client";
 
-import { useRef } from "react";
-import { Bell, Download, Globe, Moon, Sun, Upload } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Archive, Bell, Download, Globe, Moon, RotateCcw, Sun, Trash2, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
-import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
+import { useGoalStore } from "@/store/goal.store";
+import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, storageUsage, writeJSON } from "@/lib/storage";
+import { autoBackupStatus, buildBackup, mergeBackup, parseBackup, restoreSnapshot, snapshotAt } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
 import { isNative, saveFile } from "@/lib/native";
+
+const DAY = 86400000;
 
 export default function SettingsPage() {
   const hydrated = useSettingsStore((s) => s.hydrated);
@@ -16,8 +20,19 @@ export default function SettingsPage() {
   const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
   const reminderTime = useSettingsStore((s) => s.reminderTime);
   const setReminder = useSettingsStore((s) => s.setReminder);
+  const goals = useGoalStore((s) => s.goals);
+  const restoreGoal = useGoalStore((s) => s.restoreGoal);
+  const purgeGoal = useGoalStore((s) => s.purgeGoal);
+  const setArchived = useGoalStore((s) => s.setArchived);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [openList, setOpenList] = useState<"trash" | "archived" | null>(null);
   const { t, lang } = useT();
+
+  const auto = useMemo(() => autoBackupStatus(), [hydrated]);
+  const snapAt = useMemo(() => snapshotAt(), [hydrated]);
+  const usage = useMemo(() => storageUsage(), [hydrated]);
+  const deleted = useMemo(() => goals.filter((g) => g.deletedAt), [goals]);
+  const archived = useMemo(() => goals.filter((g) => !g.deletedAt && g.archived), [goals]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
 
@@ -36,17 +51,14 @@ export default function SettingsPage() {
   const notifDenied =
     reminderEnabled && !isNative() && typeof Notification !== "undefined" && Notification.permission === "denied";
 
+  const autoLabel = !auto.supported
+    ? t("set.autoBackupWeb")
+    : auto.at > 0
+      ? t("set.autoBackupOn", { n: Math.floor((Date.now() - auto.at) / DAY) })
+      : t("set.autoBackupNever");
+
   const onExport = async () => {
-    const data = {
-      app: "track100",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      goals: readJSON(STORAGE_KEYS.goals, []),
-      history: readJSON(STORAGE_KEYS.history, []),
-      settings: readJSON(STORAGE_KEYS.settings, {}),
-      achievements: readJSON(STORAGE_KEYS.achievements, []),
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(buildBackup(), null, 2)], { type: "application/json" });
     try {
       await saveFile(blob, `track100-backup-${dayKey(new Date())}.json`);
     } catch {
@@ -55,19 +67,23 @@ export default function SettingsPage() {
     writeJSON(STORAGE_KEYS.lastExport, Date.now()); // 记录备份时间,清掉首页提醒
   };
 
+  // 导入 = 严格校验 + 按 id 合并(不覆盖) + 自动留快照;任何失败都不动本地数据。
   const onImport = async (file: File) => {
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (data.app !== "track100") throw new Error("不是 Track100 的备份文件");
-      if (data.goals) writeJSON(STORAGE_KEYS.goals, data.goals);
-      if (data.history) writeJSON(STORAGE_KEYS.history, data.history);
-      if (data.settings) writeJSON(STORAGE_KEYS.settings, data.settings);
-      if (data.achievements) writeJSON(STORAGE_KEYS.achievements, data.achievements);
+      const data = parseBackup(await file.text());
+      const r = mergeBackup(data);
+      window.alert(t("import.merged", { goals: r.addedGoals, records: r.addedRecords }));
       window.location.href = "/";
     } catch (e) {
-      window.alert("导入失败:" + (e instanceof Error ? e.message : String(e)));
+      const key = e instanceof Error ? e.message : "import.invalid";
+      window.alert(t("import.failed") + t(key));
     }
+  };
+
+  const onRestoreSnapshot = () => {
+    if (!window.confirm(t("set.snapshotConfirm"))) return;
+    if (restoreSnapshot()) window.location.href = "/";
+    else window.alert(t("set.snapshotNone"));
   };
 
   return (
@@ -114,6 +130,82 @@ export default function SettingsPage() {
         <Row label={t("set.export")} icon={<Download size={18} />} onClick={onExport} />
         <Divider />
         <Row label={t("set.import")} icon={<Upload size={18} />} onClick={() => fileRef.current?.click()} />
+        <Divider />
+        <Row label={t("set.autoBackup")} value={autoLabel} />
+        <Divider />
+        <Row
+          label={t("set.storage")}
+          value={t("set.storageValue", {
+            used: formatBytes(usage),
+            total: formatBytes(STORAGE_QUOTA),
+            pct: Math.round((usage / STORAGE_QUOTA) * 100),
+          })}
+        />
+        {snapAt && (
+          <>
+            <Divider />
+            <Row
+              label={t("set.snapshot")}
+              value={snapAt.slice(0, 10)}
+              icon={<RotateCcw size={18} />}
+              onClick={onRestoreSnapshot}
+            />
+          </>
+        )}
+        <Divider />
+        <Row
+          label={t("set.trash", { n: deleted.length })}
+          icon={<Trash2 size={18} />}
+          onClick={() => setOpenList(openList === "trash" ? null : "trash")}
+        />
+        {openList === "trash" && (
+          <div className="border-t border-border px-4 py-2">
+            {deleted.length === 0 ? (
+              <p className="py-2 text-sm text-text-secondary">{t("set.emptyTrash")}</p>
+            ) : (
+              deleted.map((g) => (
+                <div key={g.id} className="flex items-center gap-2 py-2 text-sm">
+                  <span className="text-lg">{g.icon}</span>
+                  <span className="min-w-0 flex-1 truncate text-text-primary">{g.title}</span>
+                  <button onClick={() => restoreGoal(g.id)} className="shrink-0 font-medium text-primary">
+                    {t("set.restore")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(t("set.confirmPurge", { title: g.title }))) purgeGoal(g.id);
+                    }}
+                    className="shrink-0 font-medium text-danger"
+                  >
+                    {t("set.purge")}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+        <Divider />
+        <Row
+          label={t("set.archived", { n: archived.length })}
+          icon={<Archive size={18} />}
+          onClick={() => setOpenList(openList === "archived" ? null : "archived")}
+        />
+        {openList === "archived" && (
+          <div className="border-t border-border px-4 py-2">
+            {archived.length === 0 ? (
+              <p className="py-2 text-sm text-text-secondary">{t("set.emptyArchived")}</p>
+            ) : (
+              archived.map((g) => (
+                <div key={g.id} className="flex items-center gap-2 py-2 text-sm">
+                  <span className="text-lg">{g.icon}</span>
+                  <span className="min-w-0 flex-1 truncate text-text-primary">{g.title}</span>
+                  <button onClick={() => setArchived(g.id, false)} className="shrink-0 font-medium text-primary">
+                    {t("d.unarchive")}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </section>
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">

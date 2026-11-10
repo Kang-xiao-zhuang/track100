@@ -11,7 +11,7 @@ export interface Badge {
 
 /** Derived from live data — never stored (consistent with the stats philosophy). */
 export function achievements(goals: Goal[], history: ProgressRecord[]): Badge[] {
-  const active = goals.filter((g) => !g.archived);
+  const active = goals.filter((g) => !g.archived && !g.deletedAt);
   const completed = active.filter(isComplete).length;
   const checkIns = history.filter((r) => r.value > 0).length;
   const st = streak(history);
