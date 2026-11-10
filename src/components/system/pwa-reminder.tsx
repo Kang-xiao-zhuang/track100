@@ -60,7 +60,7 @@ export function PwaReminder() {
     task
       .then((r) => {
         store.setLastResult(r);
-        return checkReminderHealth();
+        return checkReminderHealth(time);
       })
       .then((h) => store.setHealth(h))
       .catch(() => store.setLastResult({ ok: false, reason: "error" }))
@@ -76,7 +76,7 @@ export function PwaReminder() {
       void ensureDailyReminders(time, lang, body, action)
         .then((r) => {
           useReminderStore.getState().setLastResult(r);
-          return checkReminderHealth();
+          return checkReminderHealth(time);
         })
         .then((h) => useReminderStore.getState().setHealth(h))
         .catch(() => {});

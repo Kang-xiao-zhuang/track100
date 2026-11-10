@@ -61,14 +61,15 @@ export function ReminderHealthPanel() {
   const [working, setWorking] = useState(false);
 
   const refresh = () => {
-    void checkReminderHealth().then(setHealth).catch(() => {});
+    void checkReminderHealth(time).then(setHealth).catch(() => {});
   };
 
   useEffect(() => {
     refresh();
     // 从系统设置页返回时权限可能已改变
     return onAppResume(refresh);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [time]);
 
   const flash = (msg: string) => {
     setMessage(msg);

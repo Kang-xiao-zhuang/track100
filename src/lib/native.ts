@@ -328,7 +328,7 @@ export function cancelDailyReminders(): Promise<void> {
 }
 
 /** 设置页自检:权限 / 精确闹钟 / 电池优化 / 实际排上的通知与下次触发时间。 */
-export async function checkReminderHealth(): Promise<ReminderHealth> {
+export async function checkReminderHealth(time?: string): Promise<ReminderHealth> {
   if (!isNative()) {
     return {
       native: false,
@@ -349,23 +349,22 @@ export async function checkReminderHealth(): Promise<ReminderHealth> {
   ]);
   const ids = reminderIds();
   const mine = pending.notifications.filter((n) => ids.includes(n.id));
-  const ats = mine
-    .map((n) => {
-      const raw = (n.schedule as unknown as { at?: unknown } | undefined)?.at;
-      const ms = raw instanceof Date ? raw.getTime() : new Date(String(raw ?? "")).getTime();
-      return Number.isFinite(ms) ? ms : null;
-    })
-    .filter((x): x is number => x !== null)
-    .sort((a, b) => a - b);
-  const future = ats.filter((ms) => ms > Date.now());
+  const rec = readSchedule();
+  const effectiveTime = time ?? rec?.time ?? null;
+  // 插件把 at 以 Java Date 塞进 JSONObject,各 ROM 序列化出的字符串不一定能被 JS 解析。
+  // 所以「下次提醒」直接由设置推导;getPending 只用来确认闹钟确实排上了。
+  const nextAt =
+    mine.length > 0 && effectiveTime
+      ? (nextTriggerSlots(effectiveTime, new Date())[0]?.toISOString() ?? null)
+      : null;
   return {
     native: true,
     display: perm.display,
     exactAlarm: exact.exact_alarm,
     batteryOptimized: power ? power.batteryOptimized : null,
     pendingCount: mine.length,
-    nextAt: future.length ? new Date(future[0]).toISOString() : null,
-    scheduledTime: readSchedule()?.time ?? null,
+    nextAt,
+    scheduledTime: rec?.time ?? null,
   };
 }
 
