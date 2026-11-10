@@ -10,6 +10,7 @@ export const STORAGE_KEYS = {
   lastRemind: "track100-last-remind",
   snapshot: "track100-snapshot",
   lastAutoBackup: "track100-last-auto-backup",
+  reminderSchedule: "track100-reminder-schedule",
 } as const;
 
 // 延迟写:打卡记录可能有几千条,每点一次都整串 JSON 写回会卡。

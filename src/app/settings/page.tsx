@@ -8,7 +8,8 @@ import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, storageUsage, writeJSON } fro
 import { autoBackupStatus, buildBackup, mergeBackup, parseBackup, restoreSnapshot, snapshotAt } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
-import { isNative, saveFile } from "@/lib/native";
+import { isNative, requestNotificationPermission, saveFile } from "@/lib/native";
+import { ReminderHealthPanel } from "@/components/system/reminder-health";
 
 const DAY = 86400000;
 
@@ -38,8 +39,12 @@ export default function SettingsPage() {
 
   const toggleReminder = async () => {
     if (!reminderEnabled) {
-      // Android 上的权限申请在 PwaReminder 里随定时一起处理
-      if (!isNative() && typeof Notification !== "undefined" && Notification.permission === "default") {
+      // 在用户手势里申请权限最可靠;被拒时仍打开开关,由自检面板显示原因并引导去系统设置,
+      // 用户授权后回前台会自动补排(ensureDailyReminders 检测到没有 pending 会重排)。
+      if (isNative()) {
+        const perm = await requestNotificationPermission().catch(() => "unknown");
+        if (perm !== "granted") window.alert(t("remind.permBlocked"));
+      } else if (typeof Notification !== "undefined" && Notification.permission === "default") {
         await Notification.requestPermission();
       }
       setReminder(true);
@@ -208,6 +213,8 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+      <ReminderHealthPanel />
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row label={t("set.about")} value={t("set.aboutSub")} />

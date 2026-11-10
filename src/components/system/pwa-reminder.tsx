@@ -2,16 +2,24 @@
 
 import { useEffect } from "react";
 import { useSettingsStore } from "@/store/settings.store";
+import { useReminderStore } from "@/store/reminder.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import { translate } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
-import { cancelDailyReminder, isNative, scheduleDailyReminder } from "@/lib/native";
+import {
+  cancelDailyReminders,
+  checkReminderHealth,
+  ensureDailyReminders,
+  isNative,
+  onAppResume,
+  scheduleDailyReminders,
+} from "@/lib/native";
 
 /**
  * 注册 Service Worker(使 App 可安装为 PWA)+ 每日提醒。
- * 说明:无后端,提醒在 App/PWA 打开时于设定时间触发一次(前台通知);
- * 真正的后台推送需要服务器(V2)。
- * Android(Capacitor)版:改用系统本地通知按天定时,App 关闭也会提醒。
+ * Web:页面打开时轮询,到点发一条前台通知(无后端做不到真后台推送)。
+ * Android:系统本地通知,App 关闭也会触发;这里是唯一的排程入口,
+ *          设置变化强制重排、回前台幂等补齐,结果写入 reminder.store 供设置页自检。
  */
 export function PwaReminder() {
   const hydrated = useSettingsStore((s) => s.hydrated);
@@ -37,19 +45,49 @@ export function PwaReminder() {
     return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
   }, []);
 
-  // Android:交给系统定时通知
+  // Android 唯一排程入口:开关 / 时间 / 语言变化,以及 App 冷启动。
   useEffect(() => {
     if (!hydrated || !isNative()) return;
-    (enabled
-      ? scheduleDailyReminder(time, translate(lang, "remind.body"), translate(lang, "notify.action"))
-      : cancelDailyReminder()
-    ).catch(() => {});
+    const store = useReminderStore.getState();
+    const body = translate(lang, "remind.body");
+    const action = translate(lang, "notify.action");
+    store.setBusy(true);
+
+    const task = enabled
+      ? scheduleDailyReminders(time, lang, body, action)
+      : cancelDailyReminders().then(() => null);
+
+    task
+      .then((r) => {
+        store.setLastResult(r);
+        return checkReminderHealth();
+      })
+      .then((h) => store.setHealth(h))
+      .catch(() => store.setLastResult({ ok: false, reason: "error" }))
+      .finally(() => store.setBusy(false));
+  }, [hydrated, enabled, time, lang]);
+
+  // 回前台:只在闹钟被系统清掉 / 快用完 / 设置变了时补排,不动已排好的通知。
+  useEffect(() => {
+    if (!hydrated || !isNative() || !enabled) return;
+    const body = translate(lang, "remind.body");
+    const action = translate(lang, "notify.action");
+    return onAppResume(() => {
+      void ensureDailyReminders(time, lang, body, action)
+        .then((r) => {
+          useReminderStore.getState().setLastResult(r);
+          return checkReminderHealth();
+        })
+        .then((h) => useReminderStore.getState().setHealth(h))
+        .catch(() => {});
+    });
   }, [hydrated, enabled, time, lang]);
 
   // Web:每日提醒轮询
   useEffect(() => {
     if (!hydrated || !enabled || isNative()) return;
     if (typeof Notification === "undefined") return;
+    void checkReminderHealth().then((h) => useReminderStore.getState().setHealth(h)).catch(() => {});
 
     const check = () => {
       if (Notification.permission !== "granted") return;

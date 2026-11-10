@@ -6,6 +6,15 @@ import {
   safeFilename,
   type SaveResult,
 } from "@/lib/share-file";
+import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
+import {
+  MIN_PENDING,
+  TEST_NOTIFICATION_ID,
+  isScheduleStale,
+  nextTriggerSlots,
+  reminderIds,
+  type ReminderScheduleRecord,
+} from "@/lib/reminder-schedule";
 
 export const isNative = () => Capacitor.isNativePlatform();
 
@@ -156,7 +165,6 @@ export async function syncStatusBar(theme: "light" | "dark"): Promise<void> {
   await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light });
 }
 
-const REMINDER_ID = 1;
 export const CHECKIN_ACTION_TYPE = "TRACK100_CHECKIN";
 export const CHECKIN_ACTION_ID = "quick-checkin";
 
@@ -182,46 +190,221 @@ export function onNotificationCheckin(cb: () => void): () => void {
   });
 }
 
-/** 打卡结果用一条即时通知反馈(用户可能没进 App 界面)。 */
+/** 打卡结果用一条即时通知反馈(用户可能没进 App 界面)。id 避开每日提醒的固定区间。 */
 export async function notifyCheckinResult(body: string): Promise<void> {
   if (!isNative()) return;
   try {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
     await LocalNotifications.schedule({
-      notifications: [{ id: Math.floor(Date.now() % 2147483000), title: "Track100", body }],
+      notifications: [{ id: 1_000_000 + Math.floor(Date.now() % 1_000_000), title: "Track100", body }],
     });
   } catch {
     // 通知权限被关闭时静默;打卡本身已经落库
   }
 }
 
-/** Android:用系统本地通知每天定时提醒(App 关闭也会触发)。返回是否获得通知权限。 */
-export async function scheduleDailyReminder(time: string, body: string, actionTitle?: string): Promise<boolean> {
+// ---- 每日提醒 ------------------------------------------------------------
+// 详见 lib/reminder-schedule.ts:一次排好未来 14 天的 at 通知,绕开 cron 重排在
+// 「精确闹钟未授权」时退化成 set(RTC) 的问题;App 回前台再补齐。
+
+interface DeviceSettingsPlugin {
+  diagnostics(): Promise<{ batteryOptimized: boolean }>;
+  openNotificationSettings(): Promise<void>;
+  openBatterySettings(): Promise<void>;
+}
+const DeviceSettings = registerPlugin<DeviceSettingsPlugin>("DeviceSettings");
+
+export interface ReminderStatus {
+  ok: boolean;
+  reason?: "permission" | "notScheduled" | "error";
+  display?: string;
+  count?: number;
+  nextAt?: string | null;
+}
+
+export interface ReminderHealth {
+  native: boolean;
+  display: string;
+  exactAlarm: string;
+  batteryOptimized: boolean | null;
+  pendingCount: number;
+  nextAt: string | null;
+  scheduledTime: string | null;
+}
+
+/** 所有排程操作串行化:设置页改时间 / App 启动 / 回前台可能同时触发,避免互相 cancel。 */
+let reminderQueue: Promise<unknown> = Promise.resolve();
+function serializeReminder<T>(fn: () => Promise<T>): Promise<T> {
+  const next = reminderQueue.then(fn, fn);
+  reminderQueue = next.catch(() => undefined);
+  return next;
+}
+
+function readSchedule(): ReminderScheduleRecord | null {
+  return readJSON<ReminderScheduleRecord | null>(STORAGE_KEYS.reminderSchedule, null);
+}
+
+/** 只在需要时弹系统权限框;返回 granted / denied / prompt 等状态。 */
+export async function requestNotificationPermission(): Promise<string> {
+  if (!isNative()) {
+    return typeof Notification === "undefined" ? "unsupported" : Notification.permission;
+  }
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   let perm = await LocalNotifications.checkPermissions();
   if (perm.display === "prompt" || perm.display === "prompt-with-rationale") {
     perm = await LocalNotifications.requestPermissions();
   }
-  await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
-  if (perm.display !== "granted") return false;
-  if (actionTitle) await registerCheckinAction(actionTitle);
-  const [hour, minute] = time.split(":").map(Number);
-  await LocalNotifications.schedule({
-    notifications: [
-      {
-        id: REMINDER_ID,
-        title: "Track100",
-        body,
-        schedule: { on: { hour, minute }, allowWhileIdle: true },
-        actionTypeId: actionTitle ? CHECKIN_ACTION_TYPE : undefined,
-        extra: { kind: "daily" },
-      },
-    ],
-  });
-  return true;
+  return perm.display;
 }
 
-export async function cancelDailyReminder(): Promise<void> {
+async function doSchedule(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+  const display = await requestNotificationPermission();
+  // 关键:权限不通过时绝不先 cancel,否则会把已经排好的闹钟删光且不再排 → 彻底不响
+  if (display !== "granted") return { ok: false, reason: "permission", display };
+
   const { LocalNotifications } = await import("@capacitor/local-notifications");
-  await LocalNotifications.cancel({ notifications: [{ id: REMINDER_ID }] });
+  await registerCheckinAction(actionTitle);
+  const ids = reminderIds();
+  const slots = nextTriggerSlots(time, new Date());
+
+  await LocalNotifications.cancel({ notifications: ids.map((id) => ({ id })) });
+  await LocalNotifications.schedule({
+    notifications: slots.map((at, i) => ({
+      id: ids[i],
+      title: "Track100",
+      body,
+      schedule: { at, allowWhileIdle: true },
+      actionTypeId: CHECKIN_ACTION_TYPE,
+      extra: { kind: "daily" },
+    })),
+  });
+
+  const pending = await LocalNotifications.getPending();
+  const mine = pending.notifications.filter((n) => ids.includes(n.id));
+  if (mine.length === 0) return { ok: false, reason: "notScheduled", display };
+  writeJSON<ReminderScheduleRecord>(STORAGE_KEYS.reminderSchedule, {
+    time,
+    lang,
+    ids,
+    scheduledAt: Date.now(),
+  });
+  return { ok: true, count: mine.length, nextAt: slots[0]?.toISOString() ?? null, display };
+}
+
+/** 设置变化 / 手动重排:强制重新排程。 */
+export function scheduleDailyReminders(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+  if (!isNative()) return Promise.resolve({ ok: false, reason: "error" });
+  return serializeReminder(() => doSchedule(time, lang, body, actionTitle));
+}
+
+async function doEnsure(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+  const rec = readSchedule();
+  if (isScheduleStale(rec, time, lang)) return doSchedule(time, lang, body, actionTitle);
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  const ids = reminderIds();
+  try {
+    const pending = await LocalNotifications.getPending();
+    const mine = pending.notifications.filter((n) => ids.includes(n.id));
+    if (mine.length < MIN_PENDING) return doSchedule(time, lang, body, actionTitle); // 被系统清掉或快用完
+    return { ok: true, count: mine.length, nextAt: null };
+  } catch {
+    return doSchedule(time, lang, body, actionTitle);
+  }
+}
+
+/** App 启动 / 回前台:只在没排上或设置变了时补排,不打扰已排好的闹钟。 */
+export function ensureDailyReminders(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+  if (!isNative()) return Promise.resolve({ ok: false, reason: "error" });
+  return serializeReminder(() => doEnsure(time, lang, body, actionTitle));
+}
+
+export function cancelDailyReminders(): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return serializeReminder(async () => {
+    const { LocalNotifications } = await import("@capacitor/local-notifications");
+    await LocalNotifications.cancel({ notifications: reminderIds().map((id) => ({ id })) });
+    writeJSON<null>(STORAGE_KEYS.reminderSchedule, null);
+  });
+}
+
+/** 设置页自检:权限 / 精确闹钟 / 电池优化 / 实际排上的通知与下次触发时间。 */
+export async function checkReminderHealth(): Promise<ReminderHealth> {
+  if (!isNative()) {
+    return {
+      native: false,
+      display: typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+      exactAlarm: "unsupported",
+      batteryOptimized: null,
+      pendingCount: 0,
+      nextAt: null,
+      scheduledTime: null,
+    };
+  }
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  const [perm, exact, pending, power] = await Promise.all([
+    LocalNotifications.checkPermissions().catch(() => ({ display: "unknown" })),
+    LocalNotifications.checkExactNotificationSetting().catch(() => ({ exact_alarm: "unknown" })),
+    LocalNotifications.getPending().catch(() => ({ notifications: [] })),
+    DeviceSettings.diagnostics().catch(() => null),
+  ]);
+  const ids = reminderIds();
+  const mine = pending.notifications.filter((n) => ids.includes(n.id));
+  const ats = mine
+    .map((n) => {
+      const raw = (n.schedule as unknown as { at?: unknown } | undefined)?.at;
+      const ms = raw instanceof Date ? raw.getTime() : new Date(String(raw ?? "")).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    })
+    .filter((x): x is number => x !== null)
+    .sort((a, b) => a - b);
+  const future = ats.filter((ms) => ms > Date.now());
+  return {
+    native: true,
+    display: perm.display,
+    exactAlarm: exact.exact_alarm,
+    batteryOptimized: power ? power.batteryOptimized : null,
+    pendingCount: mine.length,
+    nextAt: future.length ? new Date(future[0]).toISOString() : null,
+    scheduledTime: readSchedule()?.time ?? null,
+  };
+}
+
+/** 立即发一条通知,让用户当场验证权限 / 渠道是否正常。 */
+export async function sendTestNotification(body: string): Promise<void> {
+  if (!isNative()) {
+    if (typeof Notification === "undefined") throw new Error("reminder.permission");
+    if (Notification.permission === "default") await Notification.requestPermission();
+    if (Notification.permission !== "granted") throw new Error("reminder.permission");
+    new Notification("Track100", { body, icon: "/icons/icon-192.png" });
+    return;
+  }
+  const display = await requestNotificationPermission();
+  if (display !== "granted") throw new Error("reminder.permission");
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  await LocalNotifications.schedule({
+    notifications: [{ id: TEST_NOTIFICATION_ID, title: "Track100", body }],
+  });
+}
+
+/** 打开系统设置页(各 ROM 可能没有对应 Activity,失败时静默)。 */
+export async function openNotificationSettings(): Promise<void> {
+  if (isNative()) await DeviceSettings.openNotificationSettings().catch(() => {});
+}
+export async function openBatterySettings(): Promise<void> {
+  if (isNative()) await DeviceSettings.openBatterySettings().catch(() => {});
+}
+export async function openExactAlarmSettings(): Promise<void> {
+  if (!isNative()) return;
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  await LocalNotifications.changeExactNotificationSetting().catch(() => {});
+}
+
+/** App 从后台回到前台时回调(用于幂等补齐提醒)。返回取消监听函数。 */
+export function onAppResume(cb: () => void): () => void {
+  return listen(async () => {
+    const { App } = await import("@capacitor/app");
+    return App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) cb();
+    });
+  });
 }

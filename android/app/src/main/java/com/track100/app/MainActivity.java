@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // 本地插件需在 super.onCreate 之前注册
         registerPlugin(ShortcutsPlugin.class);
+        registerPlugin(DeviceSettingsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
