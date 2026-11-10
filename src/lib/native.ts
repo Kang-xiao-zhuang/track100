@@ -167,6 +167,8 @@ export async function syncStatusBar(theme: "light" | "dark"): Promise<void> {
 
 export const CHECKIN_ACTION_TYPE = "TRACK100_CHECKIN";
 export const CHECKIN_ACTION_ID = "quick-checkin";
+/** v1.4.1 及更早:单条 cron 定时通知的 id;覆盖安装时一并清掉。 */
+const LEGACY_REMINDER_ID = 1;
 
 /**
  * 注册通知栏「打卡 +1」按钮。动作定义存在原生 SharedPreferences,
@@ -267,7 +269,8 @@ async function doSchedule(time: string, lang: string, body: string, actionTitle:
   const ids = reminderIds();
   const slots = nextTriggerSlots(time, new Date());
 
-  await LocalNotifications.cancel({ notifications: ids.map((id) => ({ id })) });
+  // 顺便清掉 v1.4.1 及更早版本用的 id=1 cron 闹钟,否则覆盖安装后新旧两条提醒会同时响。
+  await LocalNotifications.cancel({ notifications: [...ids, LEGACY_REMINDER_ID].map((id) => ({ id })) });
   await LocalNotifications.schedule({
     notifications: slots.map((at, i) => ({
       id: ids[i],
@@ -322,7 +325,7 @@ export function cancelDailyReminders(): Promise<void> {
   if (!isNative()) return Promise.resolve();
   return serializeReminder(async () => {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
-    await LocalNotifications.cancel({ notifications: reminderIds().map((id) => ({ id })) });
+    await LocalNotifications.cancel({ notifications: [...reminderIds(), LEGACY_REMINDER_ID].map((id) => ({ id })) });
     writeJSON<null>(STORAGE_KEYS.reminderSchedule, null);
   });
 }
