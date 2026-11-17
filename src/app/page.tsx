@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowUpDown, Plus } from "lucide-react";
+import { ArrowUpDown, ChevronDown, Plus } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { CATEGORIES } from "@/lib/goal-meta";
-import { cellsLit, sortGoals } from "@/utils/progress";
+import { cellsLit, isComplete, sortGoals } from "@/utils/progress";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { readJSON, STORAGE_KEYS } from "@/lib/storage";
@@ -32,6 +32,7 @@ export default function HomePage() {
   const [filter, setFilter] = useState<GoalCategory | "all">("all");
   const [backupDismissed, setBackupDismissed] = useState(false);
   const [sortMode, setSortMode] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   // 只在挂载时读一次,避免每次 render 都碰 localStorage
   const [lastExport] = useState(() => readJSON<number>(STORAGE_KEYS.lastExport, 0));
 
@@ -40,6 +41,9 @@ export default function HomePage() {
   const litCells = useMemo(() => active.reduce((sum, g) => sum + cellsLit(g.current, g.target), 0), [active]);
   const checkIns = useMemo(() => history.filter((r) => r.value > 0).length, [history]);
   const visible = useMemo(() => filter === "all" ? ordered : ordered.filter((g) => g.category === filter), [filter, ordered]);
+  // 首页分两区:进行中在上、已完成折叠在下,避免完成的目标长期占住视野
+  const ongoing = useMemo(() => visible.filter((g) => !isComplete(g)), [visible]);
+  const finished = useMemo(() => visible.filter((g) => isComplete(g)), [visible]);
   const usedCategories = useMemo(() => CATEGORIES.filter((c) => active.some((g) => g.category === c.value)), [active]);
 
   if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
@@ -103,12 +107,38 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Goal list */}
+          {/* 进行中 */}
           <div className="mt-4 flex flex-col gap-3">
-            {visible.map((g) => (
+            {ongoing.map((g) => (
               <GoalCard key={g.id} goal={g} sortMode={sortMode} />
             ))}
+            {ongoing.length === 0 && (
+              <p className="rounded-card border border-dashed border-border px-4 py-6 text-center text-sm text-text-secondary">
+                {finished.length > 0 ? t("home.allDone") : t("home.noneInFilter")}
+              </p>
+            )}
           </div>
+
+          {/* 已完成:默认折叠;排序模式只作用于进行中,故隐藏 */}
+          {finished.length > 0 && !sortMode && (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowDone((v) => !v)}
+                aria-expanded={showDone}
+                className="flex w-full items-center justify-between rounded-card border border-border bg-surface px-4 py-3 text-sm font-medium text-text-secondary"
+              >
+                <span>{t("home.finished", { n: finished.length })}</span>
+                <ChevronDown size={16} className={cn("transition-transform", showDone && "rotate-180")} />
+              </button>
+              {showDone && (
+                <div className="mt-3 flex flex-col gap-3">
+                  {finished.map((g) => (
+                    <GoalCard key={g.id} goal={g} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

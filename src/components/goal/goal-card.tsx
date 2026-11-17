@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, Pin, PinOff } from "lucide-react";
 import { percent, remaining, fmt, isComplete, isHabit, isPinned } from "@/utils/progress";
 import { habitStats } from "@/utils/habit";
+import { goalRhythm, type Rhythm } from "@/utils/rhythm";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 import { useGoalStore } from "@/store/goal.store";
@@ -25,6 +26,8 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
 
   const habit = isHabit(goal);
   const stats = useMemo(() => (habit ? habitStats(goal, records) : null), [habit, goal, records]);
+  // 节奏提醒:设了截止日看领先/落后,没设则只在长期没打卡时提示
+  const rhythm = useMemo(() => goalRhythm(goal, records), [goal, records]);
   const p = percent(goal.current, goal.target);
   const left = remaining(goal);
   const done = isComplete(goal);
@@ -58,7 +61,7 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
           <div className="mt-0.5 text-sm text-text-secondary">
             {fmt(goal.current)} / {fmt(goal.target)} {t("u." + goal.unit)}
           </div>
-          <div className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-secondary">
             <span className="rounded-full bg-border/50 px-2 py-0.5">{t("cat." + goal.category)}</span>
             {habit ? (
               <span>{t("habit.consistency")} {stats!.consistency}%</span>
@@ -68,6 +71,7 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
               <span className="text-success">{t("left.done")}</span>
             )}
             {habit && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{t("f.typeHabit")}</span>}
+            {rhythm && <RhythmBadge rhythm={rhythm} />}
           </div>
         </div>
       </Link>
@@ -98,6 +102,31 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
     </div>
   );
 });
+
+function RhythmBadge({ rhythm }: { rhythm: Rhythm }) {
+  const { t } = useT();
+  const label =
+    rhythm.state === "ahead"
+      ? `↑ ${t("rhythm.ahead", { n: rhythm.days! })}`
+      : rhythm.state === "behind"
+        ? `↓ ${t("rhythm.behind", { n: rhythm.days! })}`
+        : rhythm.state === "idle"
+          ? `⏸ ${t("rhythm.idle", { n: rhythm.idleDays! })}`
+          : `● ${t("rhythm.ontime")}`;
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 font-medium",
+        rhythm.state === "ahead" && "bg-success/15 text-success",
+        rhythm.state === "behind" && "bg-danger/15 text-danger",
+        rhythm.state === "idle" && "bg-warning/15 text-warning",
+        rhythm.state === "ontime" && "bg-border/50 text-text-secondary",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
 
 function SortButton({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
   return (

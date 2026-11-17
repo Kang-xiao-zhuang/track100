@@ -229,3 +229,55 @@ describe("延迟写入", () => {
     expect(stored(STORAGE_KEYS.history)).toEqual(imported);
   });
 });
+
+describe("完成后的去处", () => {
+  it("extendGoal 把目标翻倍、保留 current 并清除完成标记", () => {
+    const s = useGoalStore.getState();
+    const g = s.createGoal(makeGoal({ target: 5 }));
+    s.addProgress(g.id, 5);
+    const done = useGoalStore.getState().getGoal(g.id)!;
+    expect(done.completedAt).toBeTruthy();
+
+    s.extendGoal(g.id);
+    const extended = useGoalStore.getState().getGoal(g.id)!;
+    expect(extended.target).toBe(10);
+    expect(extended.current).toBe(5);
+    expect(extended.completedAt).toBeUndefined();
+  });
+
+  it("startNewRound 复制设置生成新目标,旧目标归档且历史保留", () => {
+    const s = useGoalStore.getState();
+    const g = s.createGoal(makeGoal({ title: "读书", target: 2 }));
+    s.addProgress(g.id, 1);
+    s.addProgress(g.id, 1);
+
+    const fresh = s.startNewRound(g.id)!;
+    const st = useGoalStore.getState();
+    expect(fresh.id).not.toBe(g.id);
+    expect(fresh.title).toBe("读书");
+    expect(fresh.current).toBe(0);
+    expect(fresh.archived).toBe(false);
+    expect(fresh.completedAt).toBeUndefined();
+    expect(st.getGoal(g.id)!.archived).toBe(true);
+    // 旧目标的打卡记录全部保留
+    expect(st.historyOf(g.id)).toHaveLength(2);
+    expect(st.historyOf(fresh.id)).toHaveLength(0);
+  });
+
+  it("startNewRound 对不存在的目标返回 null", () => {
+    expect(useGoalStore.getState().startNewRound("nope")).toBeNull();
+  });
+
+  it("moveGoal 跳过已完成目标,避免箭头看起来没反应", () => {
+    const s = useGoalStore.getState();
+    const a = s.createGoal(makeGoal({ title: "A", target: 10 }));
+    const done = s.createGoal(makeGoal({ title: "DONE", target: 1 }));
+    const b = s.createGoal(makeGoal({ title: "B", target: 10 }));
+    s.addProgress(done.id, 1); // DONE 排在 A、B 之间(创建顺序)
+
+    // 把 A 往下移一位:应和 B 交换,而不是和已完成的目标交换
+    s.moveGoal(a.id, 1);
+    const order = sortGoals(useGoalStore.getState().goals).map((g) => g.title);
+    expect(order.indexOf("B")).toBeLessThan(order.indexOf("A"));
+  });
+});

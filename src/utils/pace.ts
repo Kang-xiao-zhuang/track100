@@ -12,8 +12,9 @@ export interface Pace {
 /**
  * 按「创建到现在」的平均速度预测完成日;若设了 endDate 再算领先/落后天数。
  * 返回 null = 还没数据可预测(没打卡)。全部实时推导,不存储。
+ * now 可注入,便于测试与在同一时刻比较多条目标。
  */
-export function pace(goal: Goal, records: ProgressRecord[]): Pace | null {
+export function pace(goal: Goal, records: ProgressRecord[], now = Date.now()): Pace | null {
   if (goal.current >= goal.target) {
     return { perDay: 0, projectedDate: null, aheadDays: null, done: true };
   }
@@ -23,12 +24,12 @@ export function pace(goal: Goal, records: ProgressRecord[]): Pace | null {
   // 起点取「创建时间」与「最早一次打卡」中较早者
   const times = checkins.map((r) => new Date(r.createdAt).getTime());
   const start = Math.min(new Date(goal.createdAt).getTime(), ...times);
-  const spanDays = Math.max(0.5, (Date.now() - start) / DAY);
+  const spanDays = Math.max(0.5, (now - start) / DAY);
   const perDay = goal.current / spanDays;
   if (perDay <= 0) return null;
 
   const remaining = goal.target - goal.current;
-  const projectedDate = new Date(Date.now() + (remaining / perDay) * DAY);
+  const projectedDate = new Date(now + (remaining / perDay) * DAY);
 
   let aheadDays: number | null = null;
   if (goal.endDate) {

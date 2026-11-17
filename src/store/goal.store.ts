@@ -3,7 +3,7 @@ import type { Goal, ProgressRecord } from "@/types/goal";
 import { STORAGE_KEYS, flushWrites, readJSON, writeJSON, writeJSONDeferred } from "@/lib/storage";
 import { createId } from "@/lib/id";
 import { indexByGoal, sortNewestFirst } from "@/utils/history";
-import { sortGoals } from "@/utils/progress";
+import { isComplete, sortGoals } from "@/utils/progress";
 
 export type GoalInput = Omit<
   Goal,
@@ -30,6 +30,10 @@ interface GoalState {
   /** 永久删除:连同历史记录一并清除,不可恢复。 */
   purgeGoal: (id: string) => void;
   setArchived: (id: string, archived: boolean) => void;
+  /** 完成后再来一轮:目标值翻倍,current 保留,清除完成标记(历史与统计不受影响)。 */
+  extendGoal: (id: string) => void;
+  /** 开启新一轮:复制目标设置生成新目标(current 从 0 开始),旧目标自动归档。返回新目标。 */
+  startNewRound: (id: string) => Goal | null;
   /** 置顶/取消置顶:order 负数 = 置顶,取消时排到末尾。 */
   setPinned: (id: string, pinned: boolean) => void;
   /** 在可见目标中上移/下移一格;全量归一化 order 后交换。 */
@@ -136,6 +140,39 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     persistGoals(goals);
   },
 
+  extendGoal: (id) => {
+    const goals = get().goals.map((g) =>
+      g.id === id
+        ? { ...g, target: g.target * 2, completedAt: undefined, updatedAt: new Date().toISOString() }
+        : g,
+    );
+    set({ goals });
+    persistGoals(goals);
+  },
+
+  startNewRound: (id) => {
+    const old = get().goals.find((g) => g.id === id);
+    if (!old) return null;
+    // 保留统计口径:旧目标归档(成果仍算进回顾),新目标从 0 开始
+    const { deletedAt: _deleted, completedAt: _completed, order: _order, ...rest } = old;
+    const now = new Date().toISOString();
+    const fresh: Goal = {
+      ...rest,
+      id: createId(),
+      current: 0,
+      createdAt: now,
+      updatedAt: now,
+      archived: false,
+    };
+    const goals = [
+      fresh,
+      ...get().goals.map((g) => (g.id === id ? { ...g, archived: true, updatedAt: now } : g)),
+    ];
+    set({ goals });
+    persistGoals(goals);
+    return fresh;
+  },
+
   setPinned: (id, pinned) => {
     const all = get().goals;
     const orders = all.map((g) => g.order ?? 0);
@@ -149,8 +186,9 @@ export const useGoalStore = create<GoalState>((set, get) => ({
 
   moveGoal: (id, dir) => {
     const all = get().goals;
-    // 只对首页可见的目标排序,避免与回收站/归档里的隐藏目标交换位置
-    const listed = sortGoals(all.filter((g) => !g.archived && !g.deletedAt));
+    // 只对首页「进行中」区排序:已完成的目标收在折叠区,不参与交换(否则按箭头看起来没反应);
+    // 回收站/归档同理排除。
+    const listed = sortGoals(all.filter((g) => !g.archived && !g.deletedAt && !isComplete(g)));
     const idx = listed.findIndex((g) => g.id === id);
     const swapIdx = idx + dir;
     if (idx < 0 || swapIdx < 0 || swapIdx >= listed.length) return;
@@ -160,9 +198,7 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     orderMap.set(listed[swapIdx].id, idx);
     const now = new Date().toISOString();
     const goals = all.map((g) =>
-      g.archived || g.deletedAt
-        ? g
-        : { ...g, order: orderMap.get(g.id) ?? 0, updatedAt: now },
+      orderMap.has(g.id) ? { ...g, order: orderMap.get(g.id)!, updatedAt: now } : g,
     );
     set({ goals });
     persistGoals(goals);

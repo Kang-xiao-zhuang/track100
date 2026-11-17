@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Archive, CalendarDays, Minus, Pencil, Plus, Share2, Trash2, X } from "lucide-react";
+import { Archive, CalendarDays, Minus, Pencil, Plus, Repeat, Share2, Sparkles, Trash2, X } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { useCheckinStore } from "@/store/checkin.store";
@@ -48,6 +48,8 @@ function GoalDetail() {
   const removeRecord = useGoalStore((s) => s.removeRecord);
   const deleteGoal = useGoalStore((s) => s.deleteGoal);
   const setArchived = useGoalStore((s) => s.setArchived);
+  const extendGoal = useGoalStore((s) => s.extendGoal);
+  const startNewRound = useGoalStore((s) => s.startNewRound);
   const showCheckin = useCheckinStore((s) => s.show);
   const mode = useSettingsStore((s) => s.growthMode);
   const setMode = useSettingsStore((s) => s.setGrowthMode);
@@ -121,6 +123,19 @@ function GoalDetail() {
     }
     setCustom("");
     setNote("");
+  };
+
+  // 完成后的三个去处:目标翻倍(继续积累)、开新一轮(旧目标归档)、归档收工
+  const onExtend = () => extendGoal(goal.id);
+
+  const onNewRound = () => {
+    const fresh = startNewRound(goal.id);
+    if (fresh) router.push(`/goals?id=${fresh.id}`);
+  };
+
+  const onArchiveDone = () => {
+    setArchived(goal.id, true);
+    router.push("/");
   };
 
   const onShare = async () => {
@@ -214,6 +229,41 @@ function GoalDetail() {
           )}
         </div>
 
+        {/* 完成后的下一步:别让界面停在「已完成」 */}
+        {done && !goal.archived && (
+          <div className="mt-3 rounded-card border border-success/40 bg-success/10 p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-success">{t("done.title")}</p>
+              {goal.completedAt && (
+                <span className="shrink-0 text-xs text-text-secondary">
+                  {t("done.on", { date: formatDate(new Date(goal.completedAt), lang) })}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-text-secondary">{t("done.sub")}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={onExtend}
+                className="flex items-center gap-1.5 rounded-btn bg-primary px-3 py-2 text-sm font-semibold text-white active:scale-95"
+              >
+                <Repeat size={15} /> {t("done.extend", { n: fmt(goal.target * 2), unit: t("u." + goal.unit) })}
+              </button>
+              <button
+                onClick={onNewRound}
+                className="flex items-center gap-1.5 rounded-btn border border-primary px-3 py-2 text-sm font-medium text-primary active:scale-95"
+              >
+                <Sparkles size={15} /> {t("done.newRound")}
+              </button>
+              <button
+                onClick={onArchiveDone}
+                className="flex items-center gap-1.5 rounded-btn px-3 py-2 text-sm text-text-secondary active:scale-95"
+              >
+                <Archive size={15} /> {t("done.archive")}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* pace / projection — 习惯型改显示本周期状态 */}
         {habit && habitData && !done ? (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-4 py-3 text-sm">
@@ -256,78 +306,82 @@ function GoalDetail() {
           </div>
         )}
 
-        {/* check-in controls */}
-        <div className="mt-5 flex items-center gap-3">
-          <button
-            onClick={() => checkIn(-goal.step)}
-            aria-label="减少"
-            className="flex h-12 w-12 items-center justify-center rounded-btn border border-border bg-surface active:scale-95"
-          >
-            <Minus size={20} />
-          </button>
-          <button
-            onClick={() => checkIn(goal.step)}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95"
-          >
-            <Plus size={20} /> {t("d.checkin", { step: fmt(goal.step), unit: t("u." + goal.unit) })}
-          </button>
-        </div>
+        {/* check-in controls — 完成后打卡会被 clamp 成 0 增量,直接收起,交给上面的引导卡 */}
+        {!done && (
+          <>
+            <div className="mt-5 flex items-center gap-3">
+              <button
+                onClick={() => checkIn(-goal.step)}
+                aria-label="减少"
+                className="flex h-12 w-12 items-center justify-center rounded-btn border border-border bg-surface active:scale-95"
+              >
+                <Minus size={20} />
+              </button>
+              <button
+                onClick={() => checkIn(goal.step)}
+                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95"
+              >
+                <Plus size={20} /> {t("d.checkin", { step: fmt(goal.step), unit: t("u." + goal.unit) })}
+              </button>
+            </div>
 
-        {/* backfill date */}
-        {(showDatePicker || backfillDate) && (
-          <div className="mt-3 flex items-center gap-2">
-            {showDatePicker ? (
+            {/* backfill date */}
+            {(showDatePicker || backfillDate) && (
+              <div className="mt-3 flex items-center gap-2">
+                {showDatePicker ? (
+                  <input
+                    type="date"
+                    value={backfillDate}
+                    max={dayKey(new Date())}
+                    onChange={(e) => setBackfillDate(e.target.value)}
+                    aria-label={t("d.backfill")}
+                    className="h-11 flex-1 rounded-input border border-border bg-surface px-3 text-sm text-text-primary outline-none focus:border-primary"
+                  />
+                ) : (
+                  <span className="flex flex-1 items-center justify-between gap-2 rounded-input border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+                    📅 {backfillDate}
+                    <button onClick={() => setBackfillDate("")} aria-label="清除">
+                      <X size={14} />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3 flex items-center gap-2">
               <input
-                type="date"
-                value={backfillDate}
-                max={dayKey(new Date())}
-                onChange={(e) => setBackfillDate(e.target.value)}
-                aria-label={t("d.backfill")}
-                className="h-11 flex-1 rounded-input border border-border bg-surface px-3 text-sm text-text-primary outline-none focus:border-primary"
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                type="number"
+                step="any"
+                placeholder={t("d.customPh")}
+                className="h-11 flex-1 rounded-input border border-border bg-surface px-4 outline-none focus:border-primary"
               />
-            ) : (
-              <span className="flex flex-1 items-center justify-between gap-2 rounded-input border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
-                📅 {backfillDate}
-                <button onClick={() => setBackfillDate("")} aria-label="清除">
-                  <X size={14} />
-                </button>
-              </span>
-            )}
-          </div>
+              <button onClick={addCustom} className="h-11 rounded-btn border border-primary px-5 font-medium text-primary active:scale-95">
+                {t("record")}
+              </button>
+              <button
+                onClick={() => setShowDatePicker((v) => !v)}
+                aria-label={t("d.backfill")}
+                className={cn(
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-btn border active:scale-95",
+                  showDatePicker || backfillDate ? "border-primary text-primary" : "border-border bg-surface text-text-secondary",
+                )}
+              >
+                <CalendarDays size={18} />
+              </button>
+            </div>
+
+            {/* 打卡备注(可选) */}
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={100}
+              placeholder={t("d.notePh")}
+              className="mt-3 h-11 w-full rounded-input border border-border bg-surface px-4 text-sm outline-none focus:border-primary"
+            />
+          </>
         )}
-
-        <div className="mt-3 flex items-center gap-2">
-          <input
-            value={custom}
-            onChange={(e) => setCustom(e.target.value)}
-            type="number"
-            step="any"
-            placeholder={t("d.customPh")}
-            className="h-11 flex-1 rounded-input border border-border bg-surface px-4 outline-none focus:border-primary"
-          />
-          <button onClick={addCustom} className="h-11 rounded-btn border border-primary px-5 font-medium text-primary active:scale-95">
-            {t("record")}
-          </button>
-          <button
-            onClick={() => setShowDatePicker((v) => !v)}
-            aria-label={t("d.backfill")}
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center rounded-btn border active:scale-95",
-              showDatePicker || backfillDate ? "border-primary text-primary" : "border-border bg-surface text-text-secondary",
-            )}
-          >
-            <CalendarDays size={18} />
-          </button>
-        </div>
-
-        {/* 打卡备注(可选) */}
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={100}
-          placeholder={t("d.notePh")}
-          className="mt-3 h-11 w-full rounded-input border border-border bg-surface px-4 text-sm outline-none focus:border-primary"
-        />
 
         {/* description */}
         {goal.description && (
