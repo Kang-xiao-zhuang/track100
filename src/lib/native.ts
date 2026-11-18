@@ -69,43 +69,6 @@ export function onShortcutCheckin(cb: (goalId: string) => void): () => void {
   return listen(() => Shortcuts.addListener("checkin", ({ goalId }) => cb(goalId)));
 }
 
-// ---- 桌面小组件 ----------------------------------------------------------
-interface WidgetGoal {
-  id: string;
-  title: string;
-  icon: string;
-  step: number;
-  current: number;
-  target: number;
-  color: string;
-}
-interface Track100WidgetPlugin {
-  syncGoals(options: { goals: WidgetGoal[] }): Promise<{ count: number }>;
-  drainPending(): Promise<{ items: { id: string; goalId: string; value: number; ts: number }[] }>;
-}
-const Track100Widget = registerPlugin<Track100WidgetPlugin>("Track100Widget");
-
-/** 把当前目标同步给桌面小组件(内部只取前 4 个进行中目标)。 */
-export async function syncWidgetGoals(goals: WidgetGoal[]): Promise<void> {
-  if (!isNative()) return;
-  try {
-    await Track100Widget.syncGoals({ goals: goals.slice(0, 4) });
-  } catch {
-    // 旧版本 APK 没有该插件,静默忽略
-  }
-}
-
-/** 取出小组件上累积的打卡,交给 JS 落地;失败返回空数组。 */
-export async function drainWidgetCheckins(): Promise<{ id: string; goalId: string; value: number; ts: number }[]> {
-  if (!isNative()) return [];
-  try {
-    const r = await Track100Widget.drainPending();
-    return Array.isArray(r?.items) ? r.items : [];
-  } catch {
-    return [];
-  }
-}
-
 function viaFileReader(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

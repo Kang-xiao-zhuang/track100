@@ -1,6 +1,7 @@
 import type { Goal } from "@/types/goal";
 import { cellsLit, fmt, percent } from "@/utils/progress";
 import { translate, type Lang } from "@/lib/i18n";
+import { accentPalette, type CardPalette } from "@/lib/accent";
 import {
   CARD,
   canvasToPngBlob,
@@ -16,22 +17,27 @@ import {
 } from "@/lib/canvas-card";
 
 /** 米白克制风目标分享卡:统一品牌框架 + 目标色小面积点缀。纯 canvas,返回 PNG blob。 */
-export async function drawShareCard(goal: Goal, lang: Lang = "zh"): Promise<Blob> {
+export async function drawShareCard(
+  goal: Goal,
+  lang: Lang = "zh",
+  palette?: CardPalette,
+): Promise<Blob> {
   await waitForFonts();
 
   const W = 1080;
   const H = 1350;
   const { canvas: c, ctx } = createCardCanvas(W, H);
   const color = normalizeHex(goal.color); // 导入备份里的脏色值退回品牌色
+  const p = palette ?? accentPalette(null);
 
   try {
     drawPaper(ctx, W, H);
     const today = new Date();
     const stamp = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, "0")}.${String(today.getDate()).padStart(2, "0")}`;
-    drawBrandHeader(ctx, W, stamp);
+    drawBrandHeader(ctx, W, stamp, p.accent);
 
     // 目标 icon:浅色点缀圆底,不再是整块彩色背景
-    ctx.fillStyle = CARD.accentSoft;
+    ctx.fillStyle = p.accentSoft;
     ctx.beginPath();
     ctx.arc(W / 2, 300, 88, 0, Math.PI * 2);
     ctx.fill();

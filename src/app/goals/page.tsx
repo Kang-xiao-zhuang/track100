@@ -10,7 +10,7 @@ import { useCheckinStore } from "@/store/checkin.store";
 import { fmt, isComplete, isHabit, percent, remaining } from "@/utils/progress";
 import { habitStats } from "@/utils/habit";
 import { pace, formatDate } from "@/utils/pace";
-import { dayKey, formatDateTime } from "@/utils/date";
+import { dayKey } from "@/utils/date";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
@@ -19,6 +19,7 @@ import { HabitView } from "@/components/progress/habit-view";
 import { GoalTrend } from "@/components/progress/goal-trend";
 import { Confetti } from "@/components/common/confetti";
 import { drawShareCard } from "@/lib/share-card";
+import { accentPalette } from "@/lib/accent";
 import { SharePreview } from "@/components/common/share-preview";
 import { DetailSkeleton } from "@/components/common/skeleton";
 import type { GrowthMode } from "@/types/goal";
@@ -47,7 +48,6 @@ function GoalDetail() {
   // byGoal 索引返回稳定引用:只有本目标新增/删除记录时才变
   const records = useGoalStore((s) => s.historyOf(id ?? ""));
   const addProgress = useGoalStore((s) => s.addProgress);
-  const removeRecord = useGoalStore((s) => s.removeRecord);
   const deleteGoal = useGoalStore((s) => s.deleteGoal);
   const setArchived = useGoalStore((s) => s.setArchived);
   const extendGoal = useGoalStore((s) => s.extendGoal);
@@ -55,10 +55,12 @@ function GoalDetail() {
   const showCheckin = useCheckinStore((s) => s.show);
   const mode = useSettingsStore((s) => s.growthMode);
   const setMode = useSettingsStore((s) => s.setGrowthMode);
+  const accentHue = useSettingsStore((s) => s.accentHue);
+  const accentSat = useSettingsStore((s) => s.accentSat);
+  const accentLight = useSettingsStore((s) => s.accentLight);
   const { t, lang } = useT();
   const [custom, setCustom] = useState("");
   const [note, setNote] = useState("");
-  const [visibleCount, setVisibleCount] = useState(30);
   const [celebrate, setCelebrate] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareBlob, setShareBlob] = useState<Blob | null>(null);
@@ -66,13 +68,13 @@ function GoalDetail() {
   const [backfillDate, setBackfillDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Celebrate whenever a check-in crosses a milestone (25/50/75/100%).
+  // 中间里程碑(25/50/75%)放彩纸;100% 达成交给全局庆祝卡,避免双重庆祝。
   const done = !!goal && isComplete(goal);
   const pNow = goal ? percent(goal.current, goal.target) : 0;
   const prevPct = useRef<number | null>(null);
   useEffect(() => {
     const prev = prevPct.current;
-    const crossed = prev !== null && pNow > prev && [25, 50, 75, 100].some((m) => prev < m && pNow >= m);
+    const crossed = prev !== null && pNow > prev && [25, 50, 75].some((m) => prev < m && pNow >= m);
     prevPct.current = pNow;
     if (crossed) {
       setCelebrate(true);
@@ -145,7 +147,7 @@ function GoalDetail() {
     if (sharing) return;
     setSharing(true);
     try {
-      const blob = await drawShareCard(goal, lang);
+      const blob = await drawShareCard(goal, lang, accentPalette(accentHue, accentSat, accentLight));
       setShareBlob(blob); // 生成后先预览,由弹层决定保存或分享
     } catch {
       window.alert(t("share.failed"));
@@ -389,46 +391,6 @@ function GoalDetail() {
 
         {/* 单目标趋势:累计曲线 + 热力图,来自本目标记录 */}
         {records.length > 0 && <GoalTrend goal={goal} records={records} />}
-
-        {/* history */}
-        <h2 className="mt-8 text-sm font-semibold text-text-secondary">{t("d.history")}</h2>
-        <div className="mt-2 flex flex-col gap-2">
-          {records.length === 0 && <p className="text-sm text-text-secondary">{t("d.noRecords")}</p>}
-          {records.slice(0, visibleCount).map((r) => (
-            <div key={r.id} className="flex items-start gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={r.value >= 0 ? "font-medium text-success" : "font-medium text-danger"}>
-                    {r.value > 0 ? "+" : ""}
-                    {fmt(r.value)} {t("u." + goal.unit)}
-                  </span>
-                  {r.backfilled && (
-                    <span className="rounded-full bg-border/50 px-1.5 py-0.5 text-[10px] text-text-secondary">
-                      {t("d.backfillTag")}
-                    </span>
-                  )}
-                </div>
-                {r.note && <p className="mt-0.5 break-words text-xs text-text-secondary">{r.note}</p>}
-              </div>
-              <span className="shrink-0 pt-0.5 text-xs text-text-secondary">{formatDateTime(r.createdAt)}</span>
-              <button
-                onClick={() => removeRecord(goal.id, r.id)}
-                aria-label={t("d.deleteRecord")}
-                className="shrink-0 pt-0.5 text-text-secondary/60 hover:text-danger"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ))}
-          {records.length > visibleCount && (
-            <button
-              onClick={() => setVisibleCount((n) => n + 30)}
-              className="mt-1 rounded-btn border border-border bg-surface py-2 text-xs text-text-secondary"
-            >
-              {t("d.loadMore", { shown: Math.min(visibleCount, records.length), total: records.length })}
-            </button>
-          )}
-        </div>
 
         {/* archive / delete */}
         <div className="mt-8 flex items-center justify-center gap-6">

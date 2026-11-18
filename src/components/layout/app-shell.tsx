@@ -9,6 +9,7 @@ import { NativeBridge } from "@/components/system/native-bridge";
 import { AutoBackup } from "@/components/system/auto-backup";
 import { StorageWarning } from "@/components/system/storage-warning";
 import { CheckinToast } from "@/components/common/checkin-toast";
+import { CelebrationLayer } from "@/components/common/celebration-layer";
 import { BottomNav } from "./bottom-nav";
 
 const NAV_ROUTES = ["/", "/stats", "/review", "/settings"];
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <NativeBridge />
       <AutoBackup />
       <CheckinToast />
+      <CelebrationLayer />
       <StorageWarning />
       <div className={showNav ? "pb-24" : ""}>{children}</div>
       {showNav && <BottomNav />}

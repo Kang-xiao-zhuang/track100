@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -26,6 +27,10 @@ export function CellGrid({
   animate?: boolean;
 }) {
   const on = Math.max(0, Math.min(100, Math.round(lit)));
+  // 首帧 prevOn === on,所有格子走原来的入场动画;之后只有新点亮的格子 pop 一下
+  const prevOn = useRef(on);
+  const newlyLitFrom = on > prevOn.current ? prevOn.current : -1;
+  useEffect(() => { prevOn.current = on; }, [on]);
   return (
     <div
       className={cn("grid", gap, className)}
@@ -38,7 +43,12 @@ export function CellGrid({
           className={cn("aspect-square transition-colors duration-500", radius)}
           style={{
             backgroundColor: i < on ? cellColor : offColor,
-            animation: animate ? `cell-appear 0.25s ${Math.min(i, 60) * 4}ms both` : undefined,
+            animation:
+              newlyLitFrom >= 0 && i >= newlyLitFrom && i < on
+                ? "cell-pop 0.36s ease-out both"
+                : animate
+                  ? `cell-appear 0.25s ${Math.min(i, 60) * 4}ms both`
+                  : undefined,
           }}
         />
       ))}

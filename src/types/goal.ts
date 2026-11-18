@@ -13,6 +13,9 @@ export type GoalUnit = "hours" | "days" | "books" | "times" | "km" | "pages" | "
 
 export type GrowthMode = "grid" | "ring" | "bar" | "tree" | "heatmap";
 
+/** 首页目标卡片的视图风格(与详情页的进度图形 GrowthMode 相互独立)。 */
+export type HomeView = "classic" | "grid" | "compact" | "minimal" | "matrix" | "tile" | "bars" | "gauge";
+
 /** cumulative = 累计到 target 即完成;habit = 按周期坚持,看重连击与坚持率。 */
 export type GoalType = "cumulative" | "habit";
 export type HabitPeriod = "daily" | "weekly";
@@ -59,7 +62,17 @@ export interface ProgressRecord {
 
 export interface Settings {
   theme: "light" | "dark";
+  /** 自定义主题色相(0-360)。null/缺省 = 默认橄榄绿。 */
+  accentHue?: number | null;
+  /** 自定义主题饱和度(0-1, HSL)。旧设置无此字段 = 按主题取固定基准值。 */
+  accentSat?: number | null;
+  /** 自定义主题明度(0-1, HSL)。旧设置无此字段 = 按主题取固定基准值。 */
+  accentLight?: number | null;
+  /** 首页显示「一键打卡全部」按钮。旧设置无此字段 = 默认开启。 */
+  oneTapEnabled?: boolean;
   growthMode: GrowthMode;
+  /** 首页卡片视图风格。旧设置无此字段 = classic。 */
+  homeView?: HomeView;
   language: "zh" | "en";
   reminderEnabled: boolean;
   reminderTime: string; // "HH:MM",主提醒时间(向后兼容,等于 reminderTimes[0])

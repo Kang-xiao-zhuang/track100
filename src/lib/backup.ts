@@ -53,7 +53,12 @@ const recordSchema = z
 const settingsSchema = z
   .object({
     theme: z.enum(["light", "dark"]).optional(),
+    accentHue: z.number().min(0).max(360).nullable().optional(),
+    accentSat: z.number().min(0).max(1).nullable().optional(),
+    accentLight: z.number().min(0).max(1).nullable().optional(),
+    oneTapEnabled: z.boolean().optional(),
     growthMode: z.enum(["grid", "ring", "bar", "tree", "heatmap"]).optional(),
+    homeView: z.enum(["classic", "grid", "compact", "minimal", "matrix", "tile", "bars", "gauge"]).optional(),
     language: z.enum(["zh", "en"]).optional(),
     reminderEnabled: z.boolean().optional(),
     reminderTime: z.string().optional(),

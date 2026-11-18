@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   snapshot: "track100-snapshot",
   lastAutoBackup: "track100-last-auto-backup",
   reminderSchedule: "track100-reminder-schedule",
+  /** 已弹过庆祝卡的成就 id,避免每次打开重复弹。 */
+  celebratedAchievements: "track100-celebrated-achievements",
 } as const;
 
 // 延迟写:打卡记录可能有几千条,每点一次都整串 JSON 写回会卡。

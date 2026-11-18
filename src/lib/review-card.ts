@@ -1,5 +1,6 @@
 import type { YearReview } from "@/utils/review";
 import { translate, type Lang } from "@/lib/i18n";
+import { accentPalette, type CardPalette } from "@/lib/accent";
 import {
   CARD,
   canvasToPngBlob,
@@ -15,16 +16,21 @@ import {
 } from "@/lib/canvas-card";
 
 /** 年度回顾分享卡:与目标卡共用米白克制风框架。纯 canvas,无外部图片。 */
-export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<Blob> {
+export async function drawReviewCard(
+  r: YearReview,
+  lang: Lang = "zh",
+  palette?: CardPalette,
+): Promise<Blob> {
   await waitForFonts();
 
   const W = 1080;
   const H = 1350;
   const { canvas: c, ctx } = createCardCanvas(W, H);
+  const p = palette ?? accentPalette(null);
 
   try {
     drawPaper(ctx, W, H);
-    drawBrandHeader(ctx, W, `${r.year}.01.01 — ${r.year}.12.31`);
+    drawBrandHeader(ctx, W, `${r.year}.01.01 — ${r.year}.12.31`, p.accent);
 
     ctx.textAlign = "center";
     // 主标题
@@ -38,7 +44,7 @@ export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<
     ctx.fillText(title, W / 2, 250);
 
     // 核心数字:点亮格子(品牌色)
-    ctx.fillStyle = CARD.accent;
+    ctx.fillStyle = p.accent;
     ctx.font = `800 200px ${CARD.font}`;
     ctx.fillText(String(r.litCells), W / 2, 490);
     ctx.fillStyle = CARD.muted;
@@ -57,7 +63,7 @@ export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<
     const x0 = W / 2 - (boxW * 3 + gap * 2) / 2;
     rows.forEach(([value, label], i) => {
       const bx = x0 + i * (boxW + gap);
-      ctx.fillStyle = CARD.accentSoft;
+      ctx.fillStyle = p.accentSoft;
       roundRect(ctx, bx, 620, boxW, boxH, 20);
       ctx.fill();
       ctx.fillStyle = CARD.ink;
@@ -77,13 +83,31 @@ export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<
         ? translate(lang, "review.cardRounds", { n: Math.ceil(r.litCells / 100) })
         : translate(lang, "share.cardGrid", { n: r.litCells });
     ctx.fillText(fitText(ctx, bandLabel, W - 200, { size: 26, minSize: 20, weight: 400, family: CARD.font }), W / 2, 878);
-    drawCellBand(ctx, lit, 100, W / 2, 920, W - 260, 20, CARD.accent);
+    drawCellBand(ctx, lit, 100, W / 2, 920, W - 260, 20, p.accent);
 
-    // 完成目标数(若>0 才显示,避免空信息)
+    // 年度结果:浅底胶囊徽章,与三栏数据卡同一套视觉语言,避免孤立黑字
     if (r.completed.length > 0) {
-      ctx.fillStyle = CARD.ink;
-      ctx.font = `500 32px ${CARD.font}`;
-      ctx.fillText(`${translate(lang, "review.completed")} ${r.completed.length}`, W / 2, 1100);
+      const label = fitText(
+        ctx,
+        translate(lang, "review.cardCompleted", { n: r.completed.length }),
+        W - 320,
+        { size: 32, minSize: 24, weight: 600, family: CARD.font },
+      );
+      const bw = Math.min(W - 200, ctx.measureText(label).width + 96);
+      const bh = 68;
+      const bx = (W - bw) / 2;
+      const by = 990;
+      ctx.fillStyle = p.accentSoft;
+      roundRect(ctx, bx, by, bw, bh, bh / 2);
+      ctx.fill();
+      ctx.strokeStyle = CARD.line;
+      ctx.lineWidth = 2;
+      roundRect(ctx, bx, by, bw, bh, bh / 2);
+      ctx.stroke();
+      ctx.fillStyle = p.accent;
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, W / 2, by + bh / 2 + 1);
+      ctx.textBaseline = "alphabetic";
     }
 
     drawFooter(ctx, W, H, translate(lang, "review.footer"));

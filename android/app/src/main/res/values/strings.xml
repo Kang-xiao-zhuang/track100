@@ -4,10 +4,4 @@
     <string name="title_activity_main">Track100</string>
     <string name="package_name">com.track100.app</string>
     <string name="custom_url_scheme">com.track100.app</string>
-
-    <!-- 桌面打卡小组件 -->
-    <string name="widget_name">Track100 打卡</string>
-    <string name="widget_description">在桌面快速打卡，最多显示 4 个目标</string>
-    <string name="widget_title">今日打卡</string>
-    <string name="widget_empty">打开 App 添加目标</string>
 </resources>

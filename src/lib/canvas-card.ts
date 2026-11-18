@@ -165,10 +165,15 @@ export function drawPaper(ctx: CanvasRenderingContext2D, W: number, H: number): 
   ctx.stroke();
 }
 
-/** 顶部品牌行:左侧小圆点 logo + Track100,右侧日期戳 YYYY.MM.DD。 */
-export function drawBrandHeader(ctx: CanvasRenderingContext2D, W: number, date: string): void {
+/** 顶部品牌行:左侧小圆点 logo + Track100,右侧日期戳 YYYY.MM.DD。accent 可跟随主题色。 */
+export function drawBrandHeader(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  date: string,
+  accent: string = CARD.accent,
+): void {
   ctx.textAlign = "left";
-  ctx.fillStyle = CARD.accent;
+  ctx.fillStyle = accent;
   ctx.beginPath();
   ctx.arc(96, 108, 9, 0, Math.PI * 2);
   ctx.fill();

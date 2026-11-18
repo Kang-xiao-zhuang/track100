@@ -94,6 +94,35 @@ export function SettingsSkeleton() {
   );
 }
 
+/** 纪念馆骨架:返回 + 标题 + 若干卡片。 */
+export function HallSkeleton() {
+  return (
+    <div className="px-5 pt-6" aria-busy="true">
+      <Skeleton className="h-9 w-9 rounded-full" />
+      <div className="mt-4 flex items-center gap-3">
+        <Skeleton className="h-12 w-12 rounded-2xl" />
+        <div>
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="mt-2 h-3 w-44" />
+        </div>
+      </div>
+      <div className="mt-4 flex flex-col gap-3">
+        {[0, 1].map((i) => (
+          <div key={i} className="rounded-card border border-border bg-surface p-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-14 w-14 rounded-2xl" />
+              <div className="flex-1">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="mt-2 h-3 w-1/2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 目标详情骨架:返回栏 + 大数字 + 进度视图 + 打卡区。 */
 export function DetailSkeleton() {
   return (

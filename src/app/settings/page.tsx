@@ -1,16 +1,23 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Archive, Bell, Download, Globe, Moon, Plus, RotateCcw, Sun, Trash2, Upload, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Archive, Bell, Download, Globe, LayoutGrid, Moon, Palette, Plus, RotateCcw, Sun, Trash2, Trophy, Upload, X } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { useGoalStore } from "@/store/goal.store";
 import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, storageUsage, writeJSON } from "@/lib/storage";
 import { autoBackupStatus, buildBackup, mergeBackup, parseBackup, restoreSnapshot, snapshotAt } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
+import { isComplete } from "@/utils/progress";
 import { isNative, requestNotificationPermission, saveFile } from "@/lib/native";
 import { ReminderHealthPanel } from "@/components/system/reminder-health";
 import { SettingsSkeleton } from "@/components/common/skeleton";
+import { ViewStylePicker } from "@/components/common/view-style-picker";
+import { AccentPicker } from "@/components/common/accent-picker";
+import { DataHealthCard } from "@/components/common/data-health-card";
+import { Zap } from "lucide-react";
+import { accentHex, accentVars, DEFAULT_ACCENT_HUE } from "@/lib/accent";
 
 const DAY = 86400000;
 
@@ -18,6 +25,11 @@ export default function SettingsPage() {
   const hydrated = useSettingsStore((s) => s.hydrated);
   const theme = useSettingsStore((s) => s.theme);
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
+  const oneTapEnabled = useSettingsStore((s) => s.oneTapEnabled) ?? true;
+  const toggleOneTap = useSettingsStore((s) => s.toggleOneTap);
+  const accentHue = useSettingsStore((s) => s.accentHue);
+  const accentSat = useSettingsStore((s) => s.accentSat);
+  const accentLight = useSettingsStore((s) => s.accentLight);
   const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
   const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
   const reminderTimes = useSettingsStore((s) => s.reminderTimes);
@@ -29,13 +41,19 @@ export default function SettingsPage() {
   const setArchived = useGoalStore((s) => s.setArchived);
   const fileRef = useRef<HTMLInputElement>(null);
   const [openList, setOpenList] = useState<"trash" | "archived" | null>(null);
+  const [showViews, setShowViews] = useState(false);
+  const [showAccent, setShowAccent] = useState(false);
+  const homeView = useSettingsStore((s) => s.homeView) ?? "classic";
   const { t, lang } = useT();
+  const router = useRouter();
+  const accentColor = `rgb(${accentVars(accentHue ?? DEFAULT_ACCENT_HUE, theme, accentSat, accentLight).primary})`;
 
   const auto = useMemo(() => autoBackupStatus(), [hydrated]);
   const snapAt = useMemo(() => snapshotAt(), [hydrated]);
   const usage = useMemo(() => storageUsage(), [hydrated]);
   const deleted = useMemo(() => goals.filter((g) => g.deletedAt), [goals]);
   const archived = useMemo(() => goals.filter((g) => !g.deletedAt && g.archived), [goals]);
+  const finishedCount = useMemo(() => goals.filter((g) => isComplete(g) && !g.deletedAt).length, [goals]);
 
   if (!hydrated) return <SettingsSkeleton />;
 
@@ -100,11 +118,62 @@ export default function SettingsPage() {
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row
+          label={t("nav.hall")}
+          value={t("hall.goalCount", { n: finishedCount })}
+          icon={<Trophy size={18} />}
+          onClick={() => router.push("/hall")}
+        />
+      </section>
+
+      <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
+        <Row
           label={t("set.appearance")}
           value={theme === "dark" ? t("set.dark") : t("set.light")}
           icon={theme === "dark" ? <Moon size={18} /> : <Sun size={18} />}
           onClick={toggleTheme}
         />
+        <Divider />
+        <Row
+          label={t("set.accent")}
+          value={accentHue == null ? t("set.accentDefault") : accentHex(accentHue, theme, accentSat, accentLight).toUpperCase()}
+          icon={<Palette size={18} />}
+          onClick={() => setShowAccent((v) => !v)}
+          swatch={accentColor}
+        />
+        {showAccent && (
+          <div className="border-t border-border bg-surface">
+            <AccentPicker />
+          </div>
+        )}
+        <Divider />
+        <Row
+          label={t("set.homeView")}
+          value={t("view." + homeView)}
+          icon={<LayoutGrid size={18} />}
+          onClick={() => setShowViews((v) => !v)}
+        />
+        {showViews && (
+          <div className="border-t border-border bg-surface">
+            <p className="px-4 pt-3 text-xs text-text-secondary">{t("set.homeViewHint")}</p>
+            <ViewStylePicker />
+          </div>
+        )}
+        <Divider />
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <span className="text-text-secondary"><Zap size={18} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-text-primary">{t("oneTap.title")}</span>
+            <span className="block text-[11px] text-text-secondary">{t("oneTap.sub")}</span>
+          </span>
+          <button
+            role="switch"
+            aria-checked={oneTapEnabled}
+            onClick={toggleOneTap}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${oneTapEnabled ? "bg-primary" : "bg-border"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${oneTapEnabled ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
         <Divider />
         <Row
           label={t("set.language")}
@@ -251,6 +320,8 @@ export default function SettingsPage() {
         )}
       </section>
 
+      <DataHealthCard onExport={onExport} />
+
       <ReminderHealthPanel />
 
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
@@ -276,7 +347,7 @@ export default function SettingsPage() {
   );
 }
 
-function Row({ label, value, icon, onClick }: { label: string; value?: string; icon?: React.ReactNode; onClick?: () => void }) {
+function Row({ label, value, icon, onClick, swatch }: { label: string; value?: string; icon?: React.ReactNode; onClick?: () => void; swatch?: string }) {
   return (
     <button
       onClick={onClick}
@@ -285,6 +356,7 @@ function Row({ label, value, icon, onClick }: { label: string; value?: string; i
     >
       {icon && <span className="text-text-secondary">{icon}</span>}
       <span className="flex-1 text-text-primary">{label}</span>
+      {swatch && <span className="h-5 w-5 shrink-0 rounded-full border border-border" style={{ backgroundColor: swatch }} />}
       {value && <span className="text-sm text-text-secondary">{value}</span>}
     </button>
   );

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Award, CalendarCheck, ChevronLeft, ChevronRight, Flame, Share2, Sparkles, Target } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
+import { useSettingsStore } from "@/store/settings.store";
 import { useT } from "@/lib/i18n";
 import { buildReview } from "@/utils/review";
 import {
@@ -13,7 +14,10 @@ import {
   type PeriodBucket,
   type ReviewPeriod,
 } from "@/utils/period-review";
+import { periodSummary } from "@/utils/period-summary";
 import { drawReviewCard } from "@/lib/review-card";
+import { accentPalette } from "@/lib/accent";
+import { useAccentColors } from "@/lib/use-accent";
 import { SharePreview } from "@/components/common/share-preview";
 import { cn } from "@/lib/cn";
 import { ReviewSkeleton } from "@/components/common/skeleton";
@@ -35,6 +39,11 @@ export default function ReviewPage() {
   const goals = useGoalStore((s) => s.goals);
   const history = useGoalStore((s) => s.history);
   const { t, lang } = useT();
+  const accentHue = useSettingsStore((s) => s.accentHue);
+  const accentSat = useSettingsStore((s) => s.accentSat);
+  const accentLight = useSettingsStore((s) => s.accentLight);
+  // SVG 渐变 stop-color 在 Android WebView 里不认 CSS 变量,用真实色值。
+  const accent = useAccentColors();
   const [period, setPeriod] = useState<ReviewPeriod>("year");
   const [anchor, setAnchor] = useState(() => new Date());
   const [sharing, setSharing] = useState(false);
@@ -53,6 +62,8 @@ export default function ReviewPage() {
     [review.buckets],
   );
   const empty = review.checkIns === 0 && review.completed.length === 0;
+  // 每个周期生成属于自己的小结句；文案按周期切换，不再是清一色「这一年」。
+  const summary = useMemo(() => periodSummary(review), [review]);
   const title =
     period === "week"
       ? t("review.weekLabel", { w: review.weekNo, y: review.anchorYear })
@@ -69,7 +80,7 @@ export default function ReviewPage() {
     if (sharing || !yearReview) return;
     setSharing(true);
     try {
-      const blob = await drawReviewCard(yearReview, lang);
+      const blob = await drawReviewCard(yearReview, lang, accentPalette(accentHue, accentSat, accentLight));
       setShareBlob(blob); // 生成后先预览
     } catch {
       window.alert(t("share.failed"));
@@ -81,12 +92,12 @@ export default function ReviewPage() {
   if (!hydrated) return <ReviewSkeleton />;
 
   return (
-    <main className="mx-auto flex h-[calc(100dvh-6rem)] max-w-app flex-col overflow-hidden px-5 pb-2 pt-6">
+    <main className="mx-auto min-h-[calc(100dvh-6rem)] max-w-app px-5 pb-2 pt-6">
       {/* header */}
       <header className="flex shrink-0 items-start justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">{t("review.eyebrow")}</p>
-          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-text-primary">{t("review.title")}</h1>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">{t(`review.eyebrow.${period}`)}</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-text-primary">{t(`review.title.${period}`)}</h1>
         </div>
         {period === "year" && (
           <button
@@ -133,7 +144,7 @@ export default function ReviewPage() {
       {/* 通透 Hero */}
       <section className="mt-4 shrink-0 rounded-card border border-border/70 bg-surface px-5 py-4">
         <div className="text-center">
-          <p className="text-[11px] tracking-wide text-text-secondary">{t("review.subtitle")}</p>
+          <p className="text-[11px] tracking-wide text-text-secondary">{t(`review.subtitle.${period}`)}</p>
           <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
             <span className="text-[44px] font-semibold leading-none tracking-tight text-primary tabular-nums">{review.litCells}</span>
             <span className="text-sm font-medium text-text-primary">{t("review.cells")}</span>
@@ -144,6 +155,27 @@ export default function ReviewPage() {
         </div>
       </section>
 
+      {/* 本期小结 —— 每个周期根据自己的数据实时生成 */}
+      <section className="mt-2.5 shrink-0 rounded-card border border-primary/20 bg-primary/[0.06] px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <Sparkles size={12} className="text-primary" />
+          <span className="text-[10px] font-semibold tracking-wide text-primary">{t("review.summary.title")}</span>
+        </div>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-text-primary">
+          {t(summary.key, summary.params)}
+        </p>
+        {summary.extraKey && (
+          <p className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
+            {t(
+              summary.extraKey,
+              summary.extraParams?.category
+                ? { ...summary.extraParams, category: t("cat." + summary.extraParams.category) }
+                : summary.extraParams,
+            )}
+          </p>
+        )}
+      </section>
+
       {/* 数据行 */}
       <div className="mt-2.5 grid shrink-0 grid-cols-4 gap-2">
         <MiniStat icon={<Flame size={15} />} label={t("review.checkIns")} value={review.checkIns} accent />
@@ -152,10 +184,10 @@ export default function ReviewPage() {
         <MiniStat icon={<Target size={15} />} label={t("review.completed")} value={review.completed.length} />
       </div>
 
-      {/* 分布图 —— 吃掉剩余空间 */}
-      <section className="mt-4 flex min-h-0 flex-1 flex-col">
+      {/* 分布图 —— 固定舒适高度 */}
+      <section className="mt-4 flex flex-col">
         <div className="mb-2 flex shrink-0 items-baseline justify-between">
-          <h2 className="text-sm font-semibold tracking-wide text-text-primary">{t("review.buckets")}</h2>
+          <h2 className="text-sm font-semibold tracking-wide text-text-primary">{t(`review.buckets.${period}`)}</h2>
           {review.bestBucket && (
             <span className="flex items-center gap-1 text-[10px] text-text-secondary">
               <Sparkles size={11} className="text-warning" />
@@ -164,19 +196,19 @@ export default function ReviewPage() {
           )}
         </div>
         {empty ? (
-          <div className="flex min-h-[80px] flex-1 flex-col items-center justify-center rounded-card border border-border/70 bg-surface text-center">
+          <div className="flex h-44 flex-col items-center justify-center rounded-card border border-border/70 bg-surface text-center">
             <div className="text-3xl opacity-70">🌱</div>
-            <p className="mt-2 text-xs font-medium text-text-primary">{t("review.empty")}</p>
-            <p className="mt-0.5 text-[10px] text-text-secondary">{t("review.emptySub")}</p>
+            <p className="mt-2 text-xs font-medium text-text-primary">{t(`review.empty.${period}`)}</p>
+            <p className="mt-0.5 text-[10px] text-text-secondary">{t(`review.emptySub.${period}`)}</p>
           </div>
         ) : (
-          <div className="min-h-[80px] flex-1 rounded-card border border-border/70 bg-surface px-2 py-3">
+          <div className="h-44 rounded-card border border-border/70 bg-surface px-2 py-3">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
                 <defs>
                   <linearGradient id="reviewBar" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity={0.82} />
-                    <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity={0.25} />
+                    <stop offset="0%" stopColor={accent.css} stopOpacity={0.82} />
+                    <stop offset="100%" stopColor={accent.css} stopOpacity={0.25} />
                   </linearGradient>
                 </defs>
                 <XAxis dataKey="name" tick={{ fontSize: 9, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} interval={0} minTickGap={12} />
@@ -193,7 +225,7 @@ export default function ReviewPage() {
         <div className="mt-3 grid shrink-0 grid-cols-3 gap-2 border-t border-border/50 pt-3">
           <Highlight label={t("review.topCategory")} value={review.topCategory ? t("cat." + review.topCategory.category) : t("review.none")} />
           <Highlight label={t("review.goalRank")} value={review.goalRanks[0] ? review.goalRanks[0].goal.title : t("review.none")} />
-          <Highlight label={t("review.completedWall")} value={String(review.completed.length)} />
+          <Highlight label={t(`review.completedWall.${period}`)} value={String(review.completed.length)} />
         </div>
       )}
 
