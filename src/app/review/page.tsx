@@ -211,8 +211,8 @@ export default function ReviewPage() {
                     <stop offset="100%" stopColor={accent.css} stopOpacity={0.25} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="name" tick={{ fontSize: 9, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} interval={0} minTickGap={12} />
-                <Tooltip cursor={{ fill: "rgb(var(--border) / 0.3)" }} contentStyle={tooltipStyle} />
+                <XAxis dataKey="name" tick={{ fontSize: 9, fill: accent.axis }} axisLine={false} tickLine={false} interval={0} minTickGap={12} />
+                <Tooltip cursor={{ fill: accent.grid, fillOpacity: 0.3 }} contentStyle={tooltipStyle} />
                 <Bar dataKey="count" fill="url(#reviewBar)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

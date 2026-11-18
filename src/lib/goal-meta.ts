@@ -34,7 +34,25 @@ export const COLORS = [
   "#EC4899", // pink
 ];
 
-export const GOAL_ICONS = ["📚", "💪", "🏃", "✍️", "🎯", "🧠", "🎸", "🌱", "💰", "🧘", "🍳", "🗺️"];
+/**
+ * Icon palette. Ordered most-used first so users rarely need to scroll far;
+ * the picker renders it as a horizontally scrolling two-row strip.
+ */
+export const GOAL_ICONS = [
+  // 通用 / 最常用
+  "🎯", "🔥", "⭐", "🚀", "⏳", "❤️",
+  // 学习
+  "📚", "📖", "✍️", "📝", "🧠", "🎓", "🔬", "🧩", "📐", "🗣️",
+  // 健身 / 健康
+  "💪", "🏃", "🚴", "🏊", "🏋️", "⚽", "🏀", "🎾", "🥊", "🧘", "🤸",
+  "🥗", "🍳", "💧", "😴", "☀️", "🌙", "🦷",
+  // 工作 / 创作
+  "💼", "💻", "📊", "🗂️", "🎨", "🎸", "🎹", "🎧", "📷", "🎬", "✂️",
+  // 生活
+  "🌱", "🌿", "🌵", "🧹", "🗺️", "✈️", "🐶",
+  // 理财 / 其他
+  "💰", "💵", "📈",
+];
 
 export function categoryLabel(c: GoalCategory): string {
   return CATEGORIES.find((x) => x.value === c)?.label ?? c;

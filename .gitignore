@@ -16,3 +16,6 @@ next-env.d.ts
 /playwright/.cache
 # 打包产物（APK 只走 GitHub Release，不入库）
 /release
+
+# 工作区本地记忆/日志
+/.workbuddy/

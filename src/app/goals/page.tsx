@@ -358,7 +358,7 @@ function GoalDetail() {
                 placeholder={t("d.customPh")}
                 className="h-11 flex-1 rounded-input border border-border bg-surface px-4 outline-none focus:border-primary"
               />
-              <button onClick={addCustom} className="h-11 rounded-btn border border-primary px-5 font-medium text-primary active:scale-95">
+              <button onClick={addCustom} className="h-11 shrink-0 whitespace-nowrap rounded-btn border border-primary px-4 font-medium text-primary active:scale-95">
                 {t("record")}
               </button>
               <button

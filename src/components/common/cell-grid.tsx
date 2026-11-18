@@ -27,14 +27,15 @@ export function CellGrid({
   animate?: boolean;
 }) {
   const on = Math.max(0, Math.min(100, Math.round(lit)));
-  // 首帧 prevOn === on,所有格子走原来的入场动画;之后只有新点亮的格子 pop 一下
+  // 首次挂载直接呈现(整块淡入),之后只有新点亮的格子 pop 一下。
+  // 之前逐格缩放入场:100 格同时缩放会让整片网格看着在抖。
   const prevOn = useRef(on);
   const newlyLitFrom = on > prevOn.current ? prevOn.current : -1;
   useEffect(() => { prevOn.current = on; }, [on]);
   return (
     <div
       className={cn("grid", gap, className)}
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, animation: animate ? "fade-in 0.22s ease-out both" : undefined }}
       aria-hidden="true"
     >
       {Array.from({ length: 100 }, (_, i) => (
@@ -43,12 +44,7 @@ export function CellGrid({
           className={cn("aspect-square transition-colors duration-500", radius)}
           style={{
             backgroundColor: i < on ? cellColor : offColor,
-            animation:
-              newlyLitFrom >= 0 && i >= newlyLitFrom && i < on
-                ? "cell-pop 0.36s ease-out both"
-                : animate
-                  ? `cell-appear 0.25s ${Math.min(i, 60) * 4}ms both`
-                  : undefined,
+            animation: newlyLitFrom >= 0 && i >= newlyLitFrom && i < on ? "cell-pop 0.36s ease-out both" : undefined,
           }}
         />
       ))}

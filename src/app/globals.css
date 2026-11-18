@@ -59,6 +59,12 @@ body {
   to   { transform: scale(1);   opacity: 1; }
 }
 
+/* 整块淡入:用于成片出现的格子网格。不缩放,避免整片网格看起来在抖。 */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 @keyframes cell-pop {
   0%   { transform: scale(0.5); opacity: 0.45; }
   60%  { transform: scale(1.18); opacity: 1; }
