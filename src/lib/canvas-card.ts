@@ -8,6 +8,18 @@
 
 const BRAND = "#556B2F";
 
+/** 米白克制风分享卡的共享色板:两张卡严格复用,保证同一套视觉语言。 */
+export const CARD = {
+  paper: "#FBF9F3",
+  ink: "#2A2A26",
+  muted: "#8A887E",
+  line: "#E8E3D7",
+  accent: BRAND,
+  accentSoft: "#EEF1E6",
+  cellOff: "#E6E2D6",
+  font: "system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+} as const;
+
 /** 只接受 #RGB / #RRGGBB;3 位展开成 6 位;其它(含导入备份里的脏数据)退回品牌色。 */
 export function normalizeHex(input: string | undefined, fallback = BRAND): string {
   const raw = (input ?? "").trim();
@@ -141,4 +153,70 @@ export function roundRect(
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** 米白纸质底 + 细边框内框。两张分享卡共用,构成统一品牌框架。 */
+export function drawPaper(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  ctx.fillStyle = CARD.paper;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = CARD.line;
+  ctx.lineWidth = 2;
+  roundRect(ctx, 36, 36, W - 72, H - 72, 28);
+  ctx.stroke();
+}
+
+/** 顶部品牌行:左侧小圆点 logo + Track100,右侧日期戳 YYYY.MM.DD。 */
+export function drawBrandHeader(ctx: CanvasRenderingContext2D, W: number, date: string): void {
+  ctx.textAlign = "left";
+  ctx.fillStyle = CARD.accent;
+  ctx.beginPath();
+  ctx.arc(96, 108, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = `600 30px ${CARD.font}`;
+  ctx.fillStyle = CARD.ink;
+  ctx.fillText("Track100", 118, 119);
+
+  ctx.textAlign = "right";
+  ctx.font = `400 26px ${CARD.font}`;
+  ctx.fillStyle = CARD.muted;
+  ctx.fillText(date, W - 96, 119);
+  ctx.textAlign = "center";
+}
+
+/** 底部标语行:细分隔线 + 居中 slogan。 */
+export function drawFooter(ctx: CanvasRenderingContext2D, W: number, H: number, slogan: string): void {
+  ctx.strokeStyle = CARD.line;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(96, H - 132);
+  ctx.lineTo(W - 96, H - 132);
+  ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.font = `500 26px ${CARD.font}`;
+  ctx.fillStyle = CARD.muted;
+  ctx.fillText(slogan, W / 2, H - 84);
+}
+
+/** 细格子带:lit 为点亮格数(0..total),cols 控制每行格数,格子自动缩放填满 maxW。 */
+export function drawCellBand(
+  ctx: CanvasRenderingContext2D,
+  lit: number,
+  total: number,
+  cx: number,
+  y: number,
+  maxW: number,
+  cols: number,
+  color: string,
+): void {
+  const gap = 10;
+  const cell = (maxW - gap * (cols - 1)) / cols;
+  const bandW = cols * cell + (cols - 1) * gap;
+  const x0 = cx - bandW / 2;
+  for (let i = 0; i < total; i++) {
+    const rx = x0 + (i % cols) * (cell + gap);
+    const ry = y + Math.floor(i / cols) * (cell + gap);
+    ctx.fillStyle = i < lit ? color : CARD.cellOff;
+    roundRect(ctx, rx, ry, cell, cell, Math.min(8, cell / 3));
+    ctx.fill();
+  }
 }

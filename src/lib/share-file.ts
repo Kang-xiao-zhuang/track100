@@ -54,4 +54,4 @@ export function isShareBusy(err: unknown): boolean {
 }
 
 /** 结果供调用方区分「真的分享出去了」和「用户取消」(设置页据此决定是否记录备份时间)。 */
-export type SaveResult = "shared" | "downloaded" | "canceled";
+export type SaveResult = "shared" | "downloaded" | "canceled" | "saved";

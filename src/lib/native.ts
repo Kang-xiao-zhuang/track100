@@ -136,6 +136,30 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
+interface GallerySaverPlugin {
+  saveImage(options: { data: string; filename: string }): Promise<{ uri: string }>;
+}
+const GallerySaver = registerPlugin<GallerySaverPlugin>("GallerySaver");
+
+/** 保存图片到系统相册:Android 走 MediaStore 插件,Web 端退化为下载。返回是否真正存入相册。 */
+export async function saveToGallery(blob: Blob, filename: string): Promise<"saved" | "downloaded"> {
+  const name = safeFilename(filename);
+  if (!isNative()) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return "downloaded";
+  }
+  const data = await blobToBase64(blob);
+  await GallerySaver.saveImage({ data, filename: name });
+  return "saved";
+}
+
 export interface SaveFileOptions {
   /** 系统分享面板里的可读标题(EXTRA_SUBJECT),可含中文;文件名本身始终是纯 ASCII。 */
   title?: string;

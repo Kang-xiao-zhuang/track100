@@ -14,7 +14,7 @@ import {
   type ReviewPeriod,
 } from "@/utils/period-review";
 import { drawReviewCard } from "@/lib/review-card";
-import { saveFile } from "@/lib/native";
+import { SharePreview } from "@/components/common/share-preview";
 import { cn } from "@/lib/cn";
 import { ReviewSkeleton } from "@/components/common/skeleton";
 import { CellGrid } from "@/components/common/cell-grid";
@@ -38,6 +38,7 @@ export default function ReviewPage() {
   const [period, setPeriod] = useState<ReviewPeriod>("year");
   const [anchor, setAnchor] = useState(() => new Date());
   const [sharing, setSharing] = useState(false);
+  const [shareBlob, setShareBlob] = useState<Blob | null>(null);
 
   const review = useMemo(
     () => buildPeriodReview(goals, history, period, anchor),
@@ -69,10 +70,7 @@ export default function ReviewPage() {
     setSharing(true);
     try {
       const blob = await drawReviewCard(yearReview, lang);
-      await saveFile(blob, `track100-review-${yearReview.year}.png`, {
-        title: t("review.cardTitle", { year: yearReview.year }),
-        dialogTitle: t("share.dialogTitle"),
-      });
+      setShareBlob(blob); // 生成后先预览
     } catch {
       window.alert(t("share.failed"));
     } finally {
@@ -198,6 +196,13 @@ export default function ReviewPage() {
           <Highlight label={t("review.completedWall")} value={String(review.completed.length)} />
         </div>
       )}
+
+      <SharePreview
+        blob={shareBlob}
+        filename={`track100-review-${review.anchorYear}.png`}
+        shareTitle={t("review.cardTitle", { year: review.anchorYear })}
+        onClose={() => setShareBlob(null)}
+      />
     </main>
   );
 }

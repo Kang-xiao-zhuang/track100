@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ShortcutsPlugin.class);
         registerPlugin(DeviceSettingsPlugin.class);
         registerPlugin(Track100WidgetPlugin.class);
+        registerPlugin(GallerySaverPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -19,7 +19,7 @@ import { HabitView } from "@/components/progress/habit-view";
 import { GoalTrend } from "@/components/progress/goal-trend";
 import { Confetti } from "@/components/common/confetti";
 import { drawShareCard } from "@/lib/share-card";
-import { saveFile } from "@/lib/native";
+import { SharePreview } from "@/components/common/share-preview";
 import { DetailSkeleton } from "@/components/common/skeleton";
 import type { GrowthMode } from "@/types/goal";
 
@@ -61,6 +61,7 @@ function GoalDetail() {
   const [visibleCount, setVisibleCount] = useState(30);
   const [celebrate, setCelebrate] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareBlob, setShareBlob] = useState<Blob | null>(null);
   // 补打卡:选中日期后,打卡/记录落到该日期;空串 = 关闭
   const [backfillDate, setBackfillDate] = useState("");
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -141,15 +142,11 @@ function GoalDetail() {
   };
 
   const onShare = async () => {
-    if (sharing) return; // 连点会撞上 Share 插件的 isPresenting 锁
+    if (sharing) return;
     setSharing(true);
     try {
       const blob = await drawShareCard(goal, lang);
-      // 文件名只用 ASCII + goal.id:标题里的 / ? # 空格会让原生写入或 MIME 推断失败
-      await saveFile(blob, `track100-goal-${goal.id}.png`, {
-        title: `${goal.title} · Track100`,
-        dialogTitle: t("share.dialogTitle"),
-      });
+      setShareBlob(blob); // 生成后先预览,由弹层决定保存或分享
     } catch {
       window.alert(t("share.failed"));
     } finally {
@@ -446,6 +443,13 @@ function GoalDetail() {
           </button>
         </div>
       </div>
+
+      <SharePreview
+        blob={shareBlob}
+        filename={`track100-goal-${goal?.id ?? "card"}.png`}
+        shareTitle={`${goal?.title ?? "Track100"} · Track100`}
+        onClose={() => setShareBlob(null)}
+      />
     </main>
   );
 }

@@ -1,17 +1,20 @@
 import type { YearReview } from "@/utils/review";
 import { translate, type Lang } from "@/lib/i18n";
 import {
+  CARD,
   canvasToPngBlob,
   createCardCanvas,
+  drawBrandHeader,
+  drawCellBand,
+  drawFooter,
+  drawPaper,
   fitText,
   releaseCanvas,
   roundRect,
   waitForFonts,
 } from "@/lib/canvas-card";
 
-const FONT = "system-ui, 'Microsoft YaHei', sans-serif";
-
-/** 年度回顾分享卡:纯 canvas,无依赖、无外部图片,不会污染画布。 */
+/** 年度回顾分享卡:与目标卡共用米白克制风框架。纯 canvas,无外部图片。 */
 export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<Blob> {
   await waitForFonts();
 
@@ -20,87 +23,70 @@ export async function drawReviewCard(r: YearReview, lang: Lang = "zh"): Promise<
   const { canvas: c, ctx } = createCardCanvas(W, H);
 
   try {
-    const bg = ctx.createLinearGradient(0, 0, W, H);
-    bg.addColorStop(0, "#556B2F");
-    bg.addColorStop(1, "#2C3A18");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    drawPaper(ctx, W, H);
+    drawBrandHeader(ctx, W, `${r.year}.01.01 — ${r.year}.12.31`);
 
     ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.font = `600 34px ${FONT}`;
-    ctx.fillText("Track100", W / 2, 110);
+    // 主标题
+    ctx.fillStyle = CARD.ink;
+    const title = fitText(ctx, translate(lang, "review.cardTitle", { year: r.year }), W - 200, {
+      size: 62,
+      minSize: 36,
+      weight: 700,
+      family: CARD.font,
+    });
+    ctx.fillText(title, W / 2, 250);
 
-    ctx.fillStyle = "#fff";
-    ctx.fillText(
-      fitText(ctx, translate(lang, "review.cardTitle", { year: r.year }), W - 100, {
-        size: 62,
-        minSize: 34,
-        weight: 700,
-        family: FONT,
-      }),
-      W / 2,
-      215,
-    );
+    // 核心数字:点亮格子(品牌色)
+    ctx.fillStyle = CARD.accent;
+    ctx.font = `800 200px ${CARD.font}`;
+    ctx.fillText(String(r.litCells), W / 2, 490);
+    ctx.fillStyle = CARD.muted;
+    ctx.font = `500 40px ${CARD.font}`;
+    ctx.fillText(translate(lang, "review.cardCells"), W / 2, 556);
 
-    ctx.font = `800 210px ${FONT}`;
-    ctx.fillText(String(r.litCells), W / 2, 440);
-    ctx.font = `600 46px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText(translate(lang, "review.cardCells"), W / 2, 510);
-
+    // 三项数据:浅色分隔card,整齐排列
     const rows: [string, string][] = [
       [String(r.checkIns), translate(lang, "review.cardCheckIns")],
       [String(r.activeDays), translate(lang, "review.cardDays")],
       [String(r.longestStreak), translate(lang, "review.cardStreak")],
     ];
-    ctx.font = `700 52px ${FONT}`;
-    ctx.fillStyle = "#fff";
+    const boxW = 264;
+    const boxH = 168;
+    const gap = 24;
+    const x0 = W / 2 - (boxW * 3 + gap * 2) / 2;
     rows.forEach(([value, label], i) => {
-      const x = W / 2 + (i - 1) * 320;
-      ctx.fillText(value, x, 640);
-      ctx.font = `400 28px ${FONT}`;
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillText(fitText(ctx, label, 290, { size: 28, minSize: 20, weight: 400, family: FONT }), x, 685);
-      ctx.font = `700 52px ${FONT}`;
-      ctx.fillStyle = "#fff";
+      const bx = x0 + i * (boxW + gap);
+      ctx.fillStyle = CARD.accentSoft;
+      roundRect(ctx, bx, 620, boxW, boxH, 20);
+      ctx.fill();
+      ctx.fillStyle = CARD.ink;
+      ctx.font = `700 60px ${CARD.font}`;
+      ctx.fillText(value, bx + boxW / 2, 706);
+      ctx.fillStyle = CARD.muted;
+      ctx.font = `400 26px ${CARD.font}`;
+      ctx.fillText(fitText(ctx, label, boxW - 24, { size: 26, minSize: 18, weight: 400, family: CARD.font }), bx + boxW / 2, 756);
     });
 
-    // 10x10 格子:超过 100 格时按比例压缩,并注明相当于多少轮
-    const rounds = Math.max(1, Math.ceil(r.litCells / 100));
-    const lit = Math.min(100, Math.round(r.litCells / rounds));
-    const cols = 10;
-    const cell = 58;
-    const gap = 10;
-    const gridW = cols * cell + (cols - 1) * gap;
-    const x0 = (W - gridW) / 2;
-    const y0 = 760;
-    for (let i = 0; i < 100; i++) {
-      const cx = x0 + (i % cols) * (cell + gap);
-      const cy = y0 + Math.floor(i / cols) * (cell + gap);
-      ctx.fillStyle = i < lit ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.18)";
-      roundRect(ctx, cx, cy, cell, cell, 12);
-      ctx.fill();
+    // 细格子带:100 格代表一年节奏,少于 100 按实际点亮,超过则满格(文案说明总量)
+    const lit = Math.min(100, r.litCells);
+    ctx.fillStyle = CARD.muted;
+    ctx.font = `400 26px ${CARD.font}`;
+    const bandLabel =
+      r.litCells > 100
+        ? translate(lang, "review.cardRounds", { n: Math.ceil(r.litCells / 100) })
+        : translate(lang, "share.cardGrid", { n: r.litCells });
+    ctx.fillText(fitText(ctx, bandLabel, W - 200, { size: 26, minSize: 20, weight: 400, family: CARD.font }), W / 2, 878);
+    drawCellBand(ctx, lit, 100, W / 2, 920, W - 260, 20, CARD.accent);
+
+    // 完成目标数(若>0 才显示,避免空信息)
+    if (r.completed.length > 0) {
+      ctx.fillStyle = CARD.ink;
+      ctx.font = `500 32px ${CARD.font}`;
+      ctx.fillText(`${translate(lang, "review.completed")} ${r.completed.length}`, W / 2, 1100);
     }
 
-    ctx.textAlign = "center";
-    ctx.font = `400 32px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    if (rounds > 1) ctx.fillText(translate(lang, "review.cardRounds", { n: rounds }), W / 2, H - 150);
-    ctx.fillText(`${translate(lang, "review.completed")} ${r.completed.length}`, W / 2, H - 100);
-    ctx.font = `600 36px ${FONT}`;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText(
-      fitText(ctx, translate(lang, "review.footer"), W - 100, {
-        size: 36,
-        minSize: 24,
-        weight: 600,
-        family: FONT,
-      }),
-      W / 2,
-      H - 45,
-    );
-
+    drawFooter(ctx, W, H, translate(lang, "review.footer"));
     return await canvasToPngBlob(c);
   } finally {
     releaseCanvas(c);
