@@ -62,7 +62,9 @@ export interface Settings {
   growthMode: GrowthMode;
   language: "zh" | "en";
   reminderEnabled: boolean;
-  reminderTime: string; // "HH:MM",每日提醒时间
+  reminderTime: string; // "HH:MM",主提醒时间(向后兼容,等于 reminderTimes[0])
+  /** 多个每日提醒时段("HH:MM"),旧设置无此字段 = 仅 reminderTime。 */
+  reminderTimes?: string[];
 }
 
 export interface Achievement {

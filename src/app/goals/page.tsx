@@ -16,9 +16,11 @@ import { useT } from "@/lib/i18n";
 import { PageHeader } from "@/components/layout/page-header";
 import { ProgressView } from "@/components/progress/progress-view";
 import { HabitView } from "@/components/progress/habit-view";
+import { GoalTrend } from "@/components/progress/goal-trend";
 import { Confetti } from "@/components/common/confetti";
 import { drawShareCard } from "@/lib/share-card";
 import { saveFile } from "@/lib/native";
+import { DetailSkeleton } from "@/components/common/skeleton";
 import type { GrowthMode } from "@/types/goal";
 
 const MODES: { value: GrowthMode; key: string }[] = [
@@ -31,7 +33,7 @@ const MODES: { value: GrowthMode; key: string }[] = [
 
 export default function GoalDetailPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<DetailSkeleton />}>
       <GoalDetail />
     </Suspense>
   );
@@ -86,7 +88,7 @@ function GoalDetail() {
     [goal, habit, records],
   );
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+  if (!hydrated) return <DetailSkeleton />;
   if (!goal) {
     return (
       <main className="p-6">
@@ -387,6 +389,9 @@ function GoalDetail() {
         {goal.description && (
           <p className="mt-6 rounded-card border border-border bg-surface p-4 text-sm text-text-secondary">{goal.description}</p>
         )}
+
+        {/* 单目标趋势:累计曲线 + 热力图,来自本目标记录 */}
+        {records.length > 0 && <GoalTrend goal={goal} records={records} />}
 
         {/* history */}
         <h2 className="mt-8 text-sm font-semibold text-text-secondary">{t("d.history")}</h2>

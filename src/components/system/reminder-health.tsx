@@ -57,11 +57,15 @@ export function ReminderHealthPanel() {
   const setHealth = useReminderStore((s) => s.setHealth);
   const enabled = useSettingsStore((s) => s.reminderEnabled);
   const time = useSettingsStore((s) => s.reminderTime);
+  const times = useSettingsStore((s) => s.reminderTimes);
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
+  const effectiveTimes = times?.length ? times : [time];
+  const timesKey = effectiveTimes.join(",");
 
   const refresh = () => {
-    void checkReminderHealth(time).then(setHealth).catch(() => {});
+    void checkReminderHealth(effectiveTimes).then(setHealth).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   };
 
   useEffect(() => {
@@ -69,7 +73,7 @@ export function ReminderHealthPanel() {
     // 从系统设置页返回时权限可能已改变
     return onAppResume(refresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [time]);
+  }, [timesKey]);
 
   const flash = (msg: string) => {
     setMessage(msg);
@@ -93,7 +97,7 @@ export function ReminderHealthPanel() {
     setWorking(true);
     try {
       const r = await scheduleDailyReminders(
-        time,
+        effectiveTimes,
         lang,
         translate(lang, "remind.body"),
         translate(lang, "notify.action"),

@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         // 本地插件需在 super.onCreate 之前注册
         registerPlugin(ShortcutsPlugin.class);
         registerPlugin(DeviceSettingsPlugin.class);
+        registerPlugin(Track100WidgetPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

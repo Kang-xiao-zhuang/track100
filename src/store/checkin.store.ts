@@ -12,15 +12,27 @@ export interface CheckinToast {
 interface CheckinState {
   toast: CheckinToast | null;
   justUndone: boolean;
+  /** 连续打卡次数(在撤销条存活期内再次打卡累加),用于「连击」提示。 */
+  combo: number;
+  lastAt: number;
   show: (toast: CheckinToast) => void;
   clear: () => void;
   markUndone: () => void;
 }
 
+const COMBO_WINDOW = 6000;
+
 export const useCheckinStore = create<CheckinState>((set) => ({
   toast: null,
   justUndone: false,
-  show: (toast) => set({ toast, justUndone: false }),
-  clear: () => set({ toast: null, justUndone: false }),
-  markUndone: () => set({ toast: null, justUndone: true }),
+  combo: 0,
+  lastAt: 0,
+  show: (toast) =>
+    set((s) => {
+      const now = Date.now();
+      const chained = !!s.toast && now - s.lastAt < COMBO_WINDOW;
+      return { toast, justUndone: false, combo: chained ? s.combo + 1 : 1, lastAt: now };
+    }),
+  clear: () => set({ toast: null, justUndone: false, combo: 0, lastAt: 0 }),
+  markUndone: () => set({ toast: null, justUndone: true, combo: 0, lastAt: 0 }),
 }));

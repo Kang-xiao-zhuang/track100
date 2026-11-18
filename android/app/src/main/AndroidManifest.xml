@@ -24,6 +24,20 @@
 
         </activity>
 
+        <!-- 桌面打卡小组件。APPWIDGET_UPDATE 由桌面发出，必须 exported。 -->
+        <receiver
+            android:name=".CheckinWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.track100.app.WIDGET_CHECKIN" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/checkin_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

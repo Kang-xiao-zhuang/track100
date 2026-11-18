@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Pin, PinOff } from "lucide-react";
 import { percent, remaining, fmt, isComplete, isHabit, isPinned } from "@/utils/progress";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/cn";
 import { useGoalStore } from "@/store/goal.store";
 import { useCheckinStore } from "@/store/checkin.store";
 import { ProgressRing } from "@/components/progress/progress-ring";
+import { SwipeableRow } from "@/components/common/swipeable-row";
 import type { Goal } from "@/types/goal";
 
 /** Goal card — memoized to skip re-renders when sibling cards change.
@@ -20,9 +22,12 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
   const addProgress = useGoalStore((s) => s.addProgress);
   const setPinned = useGoalStore((s) => s.setPinned);
   const moveGoal = useGoalStore((s) => s.moveGoal);
+  const setArchived = useGoalStore((s) => s.setArchived);
+  const deleteGoal = useGoalStore((s) => s.deleteGoal);
   // byGoal 索引引用稳定:只有本目标增删记录时才重算
   const records = useGoalStore((s) => s.historyOf(goal.id));
   const showCheckin = useCheckinStore((s) => s.show);
+  const [bump, setBump] = useState(0);
 
   const habit = isHabit(goal);
   const stats = useMemo(() => (habit ? habitStats(goal, records) : null), [habit, goal, records]);
@@ -35,14 +40,29 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
 
   const onQuickAdd = () => {
     const recordId = addProgress(goal.id, goal.step);
-    if (recordId) showCheckin({ goalId: goal.id, recordId, value: goal.step, unit: goal.unit });
+    if (recordId) {
+      showCheckin({ goalId: goal.id, recordId, value: goal.step, unit: goal.unit });
+      setBump((n) => n + 1);
+    }
   };
 
   return (
-    <div
-      style={{ animation: "fade-up 0.3s both" }}
-      className="flex items-center gap-1 rounded-card border border-border bg-surface p-4 shadow-card transition-shadow hover:shadow-hover"
+    <SwipeableRow
+      disabled={sortMode}
+      actions={{
+        pinned,
+        archived: goal.archived,
+        onPin: () => setPinned(goal.id, !pinned),
+        onArchive: () => setArchived(goal.id, !goal.archived),
+        onDelete: () => {
+          if (window.confirm(t("d.confirmDelete", { title: goal.title }))) deleteGoal(goal.id);
+        },
+      }}
     >
+      <div
+        style={{ animation: "fade-up 0.3s both" }}
+        className="flex items-center gap-1 rounded-card border border-border bg-surface p-4 shadow-card transition-shadow hover:shadow-hover"
+      >
       <Link href={`/goals?id=${goal.id}`} className="flex min-w-0 flex-1 items-center gap-4">
         <ProgressRing value={habit ? (stats!.consistency / 100) : (goal.target ? goal.current / goal.target : 0)} size={64} stroke={7} color={goal.color}>
           <span className="text-lg">{habit ? "🔥" : goal.icon}</span>
@@ -87,19 +107,25 @@ export const GoalCard = memo(function GoalCard({ goal, sortMode = false }: { goa
         </div>
       ) : (
         // 首页快捷打卡:不进详情页,一次点击完成,5 秒内可撤销
-        <button
+        <motion.button
+          key={bump}
           onClick={onQuickAdd}
           disabled={done}
           aria-label={t("home.quickAdd", { n: fmt(goal.step) })}
+          initial={false}
+          animate={bump > 0 ? { scale: [1, 1.22, 0.94, 1] } : { scale: 1 }}
+          transition={{ duration: 0.34, ease: "easeOut" }}
+          whileTap={{ scale: 0.9 }}
           className={cn(
-            "flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full border px-2 text-sm font-bold active:scale-95",
+            "flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full border px-2 text-sm font-bold",
             done ? "border-border text-text-secondary/50" : "border-primary/40 bg-primary/10 text-primary",
           )}
         >
           {done ? "✓" : `+${fmt(goal.step)}`}
-        </button>
+        </motion.button>
       )}
-    </div>
+      </div>
+    </SwipeableRow>
   );
 });
 

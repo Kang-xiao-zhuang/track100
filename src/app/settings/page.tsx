@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Archive, Bell, Download, Globe, Moon, RotateCcw, Sun, Trash2, Upload } from "lucide-react";
+import { Archive, Bell, Download, Globe, Moon, Plus, RotateCcw, Sun, Trash2, Upload, X } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { useGoalStore } from "@/store/goal.store";
 import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, storageUsage, writeJSON } from "@/lib/storage";
@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
 import { isNative, requestNotificationPermission, saveFile } from "@/lib/native";
 import { ReminderHealthPanel } from "@/components/system/reminder-health";
+import { SettingsSkeleton } from "@/components/common/skeleton";
 
 const DAY = 86400000;
 
@@ -19,8 +20,9 @@ export default function SettingsPage() {
   const toggleTheme = useSettingsStore((s) => s.toggleTheme);
   const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
   const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
-  const reminderTime = useSettingsStore((s) => s.reminderTime);
+  const reminderTimes = useSettingsStore((s) => s.reminderTimes);
   const setReminder = useSettingsStore((s) => s.setReminder);
+  const setReminderTimes = useSettingsStore((s) => s.setReminderTimes);
   const goals = useGoalStore((s) => s.goals);
   const restoreGoal = useGoalStore((s) => s.restoreGoal);
   const purgeGoal = useGoalStore((s) => s.purgeGoal);
@@ -35,7 +37,7 @@ export default function SettingsPage() {
   const deleted = useMemo(() => goals.filter((g) => g.deletedAt), [goals]);
   const archived = useMemo(() => goals.filter((g) => !g.deletedAt && g.archived), [goals]);
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+  if (!hydrated) return <SettingsSkeleton />;
 
   const toggleReminder = async () => {
     if (!reminderEnabled) {
@@ -114,14 +116,6 @@ export default function SettingsPage() {
         <div className="flex items-center gap-3 px-4 py-3.5">
           <span className="text-text-secondary"><Bell size={18} /></span>
           <span className="flex-1 text-text-primary">{t("set.reminder")}</span>
-          {reminderEnabled && (
-            <input
-              type="time"
-              value={reminderTime}
-              onChange={(e) => setReminder(true, e.target.value)}
-              className="rounded-lg border border-border bg-background px-2 py-1 text-sm text-text-primary outline-none"
-            />
-          )}
           <button
             role="switch"
             aria-checked={reminderEnabled}
@@ -131,6 +125,49 @@ export default function SettingsPage() {
             <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${reminderEnabled ? "left-[22px]" : "left-0.5"}`} />
           </button>
         </div>
+        {reminderEnabled && (
+          <div className="border-t border-border/60 px-4 py-3">
+            <p className="mb-2 text-xs text-text-secondary">{t("set.reminderTimesHint")}</p>
+            <div className="flex flex-col gap-2">
+              {(reminderTimes ?? []).map((time, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 text-xs text-text-secondary">{i + 1}</span>
+                  <input
+                    type="time"
+                    value={time}
+                    onChange={(e) => {
+                      const next = [...(reminderTimes ?? [])];
+                      next[i] = e.target.value;
+                      setReminderTimes(next);
+                    }}
+                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                  />
+                  {(reminderTimes?.length ?? 0) > 1 && (
+                    <button
+                      onClick={() => setReminderTimes((reminderTimes ?? []).filter((_, j) => j !== i))}
+                      aria-label={t("set.removeTime")}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-secondary hover:bg-danger/10 hover:text-danger"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {(reminderTimes?.length ?? 0) < 3 && (
+              <button
+                onClick={() => {
+                  const suggestions = ["08:00", "12:30", "21:30", "07:00", "18:00"];
+                  const candidate = suggestions.find((s) => !(reminderTimes ?? []).includes(s)) ?? "09:00";
+                  setReminderTimes([...(reminderTimes ?? []), candidate]);
+                }}
+                className="mt-2 flex items-center gap-1.5 text-sm font-medium text-primary"
+              >
+                <Plus size={15} /> {t("set.addTime")}
+              </button>
+            )}
+          </div>
+        )}
         {notifDenied && <p className="px-4 pb-3 text-xs text-danger">{t("set.reminderDenied")}</p>}
         <Divider />
         <Row label={t("set.export")} icon={<Download size={18} />} onClick={onExport} />

@@ -1,12 +1,37 @@
 "use client";
 
-import { useMemo } from "react";
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { useMemo, useState } from "react";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { Award, Flame, Target } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { byCategory, dailyCounts, overview, streak } from "@/utils/stats";
 import { achievements } from "@/utils/achievements";
+import { cellsLit } from "@/utils/progress";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
+import { StatsSkeleton } from "@/components/common/skeleton";
+import { CellGrid } from "@/components/common/cell-grid";
+import { ProgressRing } from "@/components/progress/progress-ring";
+import { AchievementSheet } from "@/components/common/achievement-sheet";
+
+const CATEGORY_COLORS: Record<string, string> = {
+  learning: "#6E7F4F",
+  health: "#B0725A",
+  fitness: "#C08A4E",
+  work: "#5E7C8C",
+  life: "#7C8C6A",
+  finance: "#A68B4E",
+  other: "#8A7E8F",
+};
+
+const tooltipStyle = {
+  background: "rgb(var(--surface))",
+  border: "1px solid rgb(var(--border))",
+  borderRadius: 12,
+  fontSize: 12,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+  color: "rgb(var(--text-primary))",
+} as const;
 
 export default function StatsPage() {
   const hydrated = useGoalStore((s) => s.hydrated);
@@ -16,89 +41,162 @@ export default function StatsPage() {
   const { t } = useT();
   const ov = useMemo(() => overview(goals, history), [goals, history]);
   const st = useMemo(() => streak(history), [history]);
-  const cats = useMemo(() => byCategory(goals).map((c) => ({ name: t("cat." + c.category), count: c.count })), [goals, t]);
+  const cats = useMemo(
+    () => byCategory(goals).map((c) => ({ ...c, label: t("cat." + c.category), color: CATEGORY_COLORS[c.category] ?? "#6E7F4F" })),
+    [goals, t],
+  );
   const daily = useMemo(() => dailyCounts(history, 30), [history]);
   const badges = useMemo(() => achievements(goals, history), [goals, history]);
+  const totalCells = useMemo(
+    () => goals.filter((g) => !g.archived && !g.deletedAt).reduce((sum, g) => sum + cellsLit(g.current, g.target), 0),
+    [goals],
+  );
+  const unlocked = badges.filter((b) => b.unlocked).length;
+  const catTotal = cats.reduce((s, c) => s + c.count, 0) || 1;
+  const [badgeIndex, setBadgeIndex] = useState<number | null>(null);
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+  if (!hydrated) return <StatsSkeleton />;
 
   return (
-    <main className="px-5 pt-6">
-      <h1 className="text-xl font-bold">{t("stats.title")}</h1>
+    <main className="mx-auto flex h-[calc(100dvh-6rem)] max-w-app flex-col overflow-hidden px-5 pb-2 pt-6">
+      {/* header */}
+      <header className="flex shrink-0 items-start justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">{t("stats.eyebrow")}</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-text-primary">{t("stats.title")}</h1>
+        </div>
+        <div className="text-right">
+          <div className="text-xl font-semibold tracking-tight text-text-primary">
+            {unlocked}<span className="text-xs font-normal text-text-secondary">/{badges.length}</span>
+          </div>
+          <div className="mt-0.5 text-[10px] tracking-wide text-text-secondary">{t("stats.achievements")}</div>
+        </div>
+      </header>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <StatCard label={t("stats.totalGoals")} value={ov.totalGoals} />
-        <StatCard label={t("stats.completed")} value={ov.completedGoals} />
-        <StatCard label={t("stats.streak")} value={`${st} ${t("unit.days")}`} />
-        <StatCard label={t("stats.records")} value={ov.totalRecords} />
+      {/* 通透 Hero */}
+      <section className="mt-4 shrink-0 rounded-card border border-border/70 bg-surface p-4">
+        <div className="flex items-center gap-4">
+          <ProgressRing value={ov.completionRate / 100} size={86} stroke={7} color="rgb(var(--primary))">
+            <div className="text-center">
+              <div className="text-xl font-semibold tracking-tight text-text-primary">{ov.completionRate}%</div>
+              <div className="mt-0.5 text-[8px] uppercase tracking-widest text-text-secondary">{t("stats.rate")}</div>
+            </div>
+          </ProgressRing>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] tracking-wide text-text-secondary">{t("stats.totalCells")}</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[40px] font-semibold leading-none tracking-tight text-text-primary tabular-nums">{totalCells}</span>
+              <span className="text-sm text-text-secondary">{t("review.cells")}</span>
+            </div>
+            <p className="mt-1 text-[11px] text-text-secondary">
+              {t("stats.heroSub", { done: ov.completedGoals, total: ov.totalGoals })}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3.5 border-t border-border/60 pt-3">
+          <CellGrid lit={ov.completionRate} cols={25} gap="gap-1" />
+        </div>
+      </section>
+
+      {/* 数据行 */}
+      <div className="mt-2.5 grid shrink-0 grid-cols-3 gap-2">
+        <MiniStat icon={<Flame size={16} />} label={t("stats.streak")} value={st} unit={t("unit.days")} accent />
+        <MiniStat icon={<Target size={16} />} label={t("stats.totalGoals")} value={ov.totalGoals} />
+        <MiniStat icon={<Award size={16} />} label={t("stats.completed")} value={ov.completedGoals} />
       </div>
 
-      <StatCard className="mt-3" label={t("stats.rate")} value={`${ov.completionRate}%`} big />
-
-      {cats.length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.catDist")}</h2>
-          <div className="rounded-card border border-border bg-surface p-4">
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={cats}>
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} />
-                <Tooltip cursor={{ fill: "rgb(var(--border) / 0.3)" }} contentStyle={tooltipStyle} />
-                <Bar dataKey="count" fill="rgb(var(--primary))" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      )}
-
-      <section className="mt-6">
-        <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.last30")}</h2>
-        <div className="rounded-card border border-border bg-surface p-4">
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={daily}>
-              <Tooltip cursor={{ fill: "rgb(var(--border) / 0.3)" }} contentStyle={tooltipStyle} />
-              <Bar dataKey="count" fill="rgb(var(--primary))" radius={[3, 3, 0, 0]} />
-            </BarChart>
+      {/* 活跃曲线 —— 吃掉剩余空间 */}
+      <section className="mt-4 flex min-h-0 flex-1 flex-col">
+        <div className="mb-2 flex shrink-0 items-baseline justify-between">
+          <h2 className="text-sm font-semibold tracking-wide text-text-primary">{t("stats.last30")}</h2>
+          <span className="text-[11px] text-text-secondary">{t("stats.last30Sub")}</span>
+        </div>
+        <div className="min-h-[80px] flex-1 rounded-card border border-border/70 bg-surface px-2 py-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={daily} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
+              <defs>
+                <linearGradient id="statsArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity={0.24} />
+                  <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fontSize: 9, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} minTickGap={28} />
+              <Tooltip cursor={{ stroke: "rgb(var(--border))", strokeDasharray: "3 3" }} contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="count" stroke="rgb(var(--primary))" strokeWidth={2} fill="url(#statsArea)" dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </section>
 
-      <section className="mt-6 pb-4">
-        <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("stats.achievements")}</h2>
-        <div className="grid grid-cols-2 gap-3">
-          {badges.map((b) => (
-            <div
+      {/* 分类色带 + 成就图标行 */}
+      <div className="mt-3 shrink-0 space-y-2.5">
+        {cats.length > 0 && (
+          <div>
+            <div className="mb-1 flex h-1.5 gap-0.5 overflow-hidden rounded-full">
+              {cats.map((c) => (
+                <div key={c.category} style={{ width: `${(c.count / catTotal) * 100}%`, backgroundColor: c.color }} title={`${c.label} ${c.count}`} />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+              {cats.map((c) => (
+                <span key={c.category} className="flex items-center gap-1 text-[10px] text-text-secondary">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c.color }} />
+                  {c.label} {c.count}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between border-t border-border/50 pt-2.5">
+          {badges.map((b, i) => (
+            <button
               key={b.id}
+              onClick={() => setBadgeIndex(i)}
+              aria-label={t(`b.${b.id}.t`)}
               className={cn(
-                "flex items-center gap-3 rounded-card border p-3.5",
-                b.unlocked ? "border-primary/40 bg-primary/5" : "border-border bg-surface opacity-60",
+                "flex h-9 w-9 items-center justify-center rounded-xl text-xl leading-none transition-colors active:bg-border/60",
+                !b.unlocked && "grayscale opacity-30",
               )}
             >
-              <span className={cn("text-3xl", !b.unlocked && "grayscale")}>{b.icon}</span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-text-primary">{t(`b.${b.id}.t`)}</div>
-                <div className="truncate text-xs text-text-secondary">{t(`b.${b.id}.d`)}</div>
-              </div>
-            </div>
+              {b.icon}
+            </button>
           ))}
         </div>
-      </section>
+      </div>
+
+      <AchievementSheet
+        badges={badges}
+        index={badgeIndex}
+        onClose={() => setBadgeIndex(null)}
+        onChange={setBadgeIndex}
+      />
     </main>
   );
 }
 
-const tooltipStyle = {
-  background: "rgb(var(--surface))",
-  border: "1px solid rgb(var(--border))",
-  borderRadius: 12,
-  fontSize: 12,
-  color: "rgb(var(--text-primary))",
-} as const;
-
-function StatCard({ label, value, big, className }: { label: string; value: string | number; big?: boolean; className?: string }) {
+function MiniStat({
+  icon,
+  label,
+  value,
+  unit,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  unit?: string;
+  accent?: boolean;
+}) {
   return (
-    <div className={`rounded-card border border-border bg-surface p-4 ${className ?? ""}`}>
-      <div className="text-sm text-text-secondary">{label}</div>
-      <div className={big ? "mt-1 text-3xl font-bold text-primary" : "mt-1 text-2xl font-bold text-text-primary"}>{value}</div>
+    <div className="rounded-2xl border border-border/70 bg-surface p-3">
+      <div className={cn("mb-2 inline-flex h-7 w-7 items-center justify-center rounded-lg", accent ? "bg-warning/12 text-warning" : "bg-primary/10 text-primary")}>
+        {icon}
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span className="text-xl font-semibold tabular-nums leading-none tracking-tight text-text-primary">{value}</span>
+        {unit && <span className="text-[10px] text-text-secondary">{unit}</span>}
+      </div>
+      <div className="mt-1 truncate text-[10px] text-text-secondary">{label}</div>
     </div>
   );
 }

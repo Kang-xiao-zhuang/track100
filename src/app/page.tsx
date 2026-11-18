@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
 import { readJSON, STORAGE_KEYS } from "@/lib/storage";
 import { GoalCard } from "@/components/goal/goal-card";
+import { HomeSkeleton } from "@/components/common/skeleton";
 import type { GoalCategory } from "@/types/goal";
 
 const DAY = 86400000;
@@ -46,7 +47,7 @@ export default function HomePage() {
   const finished = useMemo(() => visible.filter((g) => isComplete(g)), [visible]);
   const usedCategories = useMemo(() => CATEGORIES.filter((c) => active.some((g) => g.category === c.value)), [active]);
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+  if (!hydrated) return <HomeSkeleton />;
 
   const backupDays = lastExport ? Math.floor((Date.now() - lastExport) / DAY) : null;
   const showBackup =

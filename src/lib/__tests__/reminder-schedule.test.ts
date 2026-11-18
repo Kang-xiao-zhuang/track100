@@ -3,8 +3,10 @@ import {
   MIN_PENDING,
   REMINDER_DAYS,
   TEST_NOTIFICATION_ID,
+  allReminderIds,
   isScheduleStale,
   nextTriggerSlots,
+  normalizeReminderTimes,
   parseReminderTime,
   reminderIds,
   type ReminderScheduleRecord,
@@ -28,6 +30,25 @@ describe("reminderIds", () => {
   });
   it("补齐阈值小于总量", () => {
     expect(MIN_PENDING).toBeLessThan(REMINDER_DAYS);
+  });
+  it("多时段 ID 段互不重叠", () => {
+    const a = reminderIds(0);
+    const b = reminderIds(1);
+    const c = reminderIds(2);
+    const all = allReminderIds();
+    expect(new Set([...a, ...b, ...c]).size).toBe(all.length);
+    expect(all).not.toContain(TEST_NOTIFICATION_ID);
+  });
+});
+
+describe("normalizeReminderTimes", () => {
+  it("去空、去重、补零、排序、限长", () => {
+    expect(normalizeReminderTimes(["9:5", "20:00", "9:05", "bad", "07:30", "12:00", "18:00"]))
+      .toEqual(["07:30", "09:05", "12:00"]); // 最多 3 个,排序后取前三
+  });
+  it("空输入回退到默认时段", () => {
+    expect(normalizeReminderTimes([])).toEqual(["20:00"]);
+    expect(normalizeReminderTimes(undefined)).toEqual(["20:00"]);
   });
 });
 

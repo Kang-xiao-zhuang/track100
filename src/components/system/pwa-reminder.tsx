@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useSettingsStore } from "@/store/settings.store";
 import { useReminderStore } from "@/store/reminder.store";
 import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
@@ -25,7 +25,9 @@ export function PwaReminder() {
   const hydrated = useSettingsStore((s) => s.hydrated);
   const enabled = useSettingsStore((s) => s.reminderEnabled);
   const time = useSettingsStore((s) => s.reminderTime);
+  const times = useSettingsStore((s) => s.reminderTimes);
   const lang = useSettingsStore((s) => s.language);
+  const effectiveTimes = useMemo(() => (times?.length ? times : [time]), [times, time]);
 
   // 注册 SW(原生 App 不需要)。
   // URL 带构建版本:升版本后浏览器会安装新 SW,activate 清掉旧缓存;
@@ -54,18 +56,18 @@ export function PwaReminder() {
     store.setBusy(true);
 
     const task = enabled
-      ? scheduleDailyReminders(time, lang, body, action)
+      ? scheduleDailyReminders(effectiveTimes, lang, body, action)
       : cancelDailyReminders().then(() => null);
 
     task
       .then((r) => {
         store.setLastResult(r);
-        return checkReminderHealth(time);
+        return checkReminderHealth(effectiveTimes);
       })
       .then((h) => store.setHealth(h))
       .catch(() => store.setLastResult({ ok: false, reason: "error" }))
       .finally(() => store.setBusy(false));
-  }, [hydrated, enabled, time, lang]);
+  }, [hydrated, enabled, effectiveTimes, lang]);
 
   // 回前台:只在闹钟被系统清掉 / 快用完 / 设置变了时补排,不动已排好的通知。
   useEffect(() => {
@@ -73,45 +75,49 @@ export function PwaReminder() {
     const body = translate(lang, "remind.body");
     const action = translate(lang, "notify.action");
     return onAppResume(() => {
-      void ensureDailyReminders(time, lang, body, action)
+      void ensureDailyReminders(effectiveTimes, lang, body, action)
         .then((r) => {
           useReminderStore.getState().setLastResult(r);
-          return checkReminderHealth(time);
+          return checkReminderHealth(effectiveTimes);
         })
         .then((h) => useReminderStore.getState().setHealth(h))
         .catch(() => {});
     });
-  }, [hydrated, enabled, time, lang]);
+  }, [hydrated, enabled, effectiveTimes, lang]);
 
-  // Web:每日提醒轮询
+  // Web:每日提醒轮询(每个时段独立记录,一天可提醒多次)
   useEffect(() => {
     if (!hydrated || !enabled || isNative()) return;
     if (typeof Notification === "undefined") return;
-    void checkReminderHealth().then((h) => useReminderStore.getState().setHealth(h)).catch(() => {});
+    void checkReminderHealth(effectiveTimes).then((h) => useReminderStore.getState().setHealth(h)).catch(() => {});
 
     const check = () => {
       if (Notification.permission !== "granted") return;
       const now = new Date();
-      const [h, m] = time.split(":").map(Number);
-      const due = now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m);
-      if (!due) return;
       const today = dayKey(now);
-      if (readJSON<string>(STORAGE_KEYS.lastRemind, "") === today) return; // 今天已提醒
-      writeJSON(STORAGE_KEYS.lastRemind, today);
-      try {
-        new Notification("Track100", {
-          body: translate(lang, "remind.body"),
-          icon: "/icons/icon-192.png",
-        });
-      } catch {
-        /* ignore */
+      for (const t of effectiveTimes) {
+        const [h, m] = t.split(":").map(Number);
+        const due = now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m);
+        if (!due) continue;
+        // 每个时段用独立 key 记录当天是否已提醒
+        const key = `${STORAGE_KEYS.lastRemind}-${t.replace(":", "")}`;
+        if (readJSON<string>(key, "") === today) continue;
+        writeJSON(key, today);
+        try {
+          new Notification("Track100", {
+            body: translate(lang, "remind.body"),
+            icon: "/icons/icon-192.png",
+          });
+        } catch {
+          /* ignore */
+        }
       }
     };
 
     check();
     const id = window.setInterval(check, 60000);
     return () => window.clearInterval(id);
-  }, [hydrated, enabled, time, lang]);
+  }, [hydrated, enabled, effectiveTimes, lang]);
 
   return null;
 }

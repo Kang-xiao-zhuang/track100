@@ -2,51 +2,77 @@
 
 import { useMemo, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
-import { ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import { Award, CalendarCheck, ChevronLeft, ChevronRight, Flame, Share2, Sparkles, Target } from "lucide-react";
 import { useGoalStore } from "@/store/goal.store";
 import { useT } from "@/lib/i18n";
-import { availableYears, buildReview } from "@/utils/review";
+import { buildReview } from "@/utils/review";
+import {
+  buildPeriodReview,
+  canGoNext,
+  shiftPeriod,
+  type PeriodBucket,
+  type ReviewPeriod,
+} from "@/utils/period-review";
 import { drawReviewCard } from "@/lib/review-card";
 import { saveFile } from "@/lib/native";
 import { cn } from "@/lib/cn";
+import { ReviewSkeleton } from "@/components/common/skeleton";
+import { CellGrid } from "@/components/common/cell-grid";
 
 const tooltipStyle = {
   background: "rgb(var(--surface))",
   border: "1px solid rgb(var(--border))",
   borderRadius: 12,
   fontSize: 12,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
   color: "rgb(var(--text-primary))",
 } as const;
+
+const PERIODS: ReviewPeriod[] = ["week", "month", "year"];
 
 export default function ReviewPage() {
   const hydrated = useGoalStore((s) => s.hydrated);
   const goals = useGoalStore((s) => s.goals);
   const history = useGoalStore((s) => s.history);
   const { t, lang } = useT();
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [period, setPeriod] = useState<ReviewPeriod>("year");
+  const [anchor, setAnchor] = useState(() => new Date());
   const [sharing, setSharing] = useState(false);
 
-  const years = useMemo(() => availableYears(goals, history), [goals, history]);
-  const r = useMemo(() => buildReview(goals, history, year), [goals, history, year]);
-  const monthly = useMemo(
-    () => r.monthly.map((m) => ({ name: String(m.month), count: m.count })),
-    [r.monthly],
+  const review = useMemo(
+    () => buildPeriodReview(goals, history, period, anchor),
+    [goals, history, period, anchor],
   );
-  const idx = years.indexOf(year);
-  const prevYear = idx >= 0 && idx < years.length - 1 ? years[idx + 1] : null;
-  const nextYear = idx > 0 ? years[idx - 1] : null;
-  const empty = r.checkIns === 0 && r.completed.length === 0;
+  const yearReview = useMemo(
+    () => (period === "year" ? buildReview(goals, history, anchor.getFullYear()) : null),
+    [goals, history, period, anchor],
+  );
+  const chartData = useMemo(
+    () => review.buckets.map((b: PeriodBucket) => ({ name: b.label, count: b.count })),
+    [review.buckets],
+  );
+  const empty = review.checkIns === 0 && review.completed.length === 0;
+  const title =
+    period === "week"
+      ? t("review.weekLabel", { w: review.weekNo, y: review.anchorYear })
+      : period === "month"
+        ? t("review.monthLabel", { y: review.anchorYear, m: review.anchorMonth })
+        : t("review.yearLabel", { y: review.anchorYear });
+
+  const goPrev = () => setAnchor((a) => shiftPeriod(period, a, -1));
+  const goNext = () => {
+    if (canGoNext(period, anchor)) setAnchor((a) => shiftPeriod(period, a, 1));
+  };
 
   const onShare = async () => {
-    if (sharing) return; // 连点会撞上 Share 插件的 isPresenting 锁
+    if (sharing || !yearReview) return;
     setSharing(true);
     try {
-      const blob = await drawReviewCard(r, lang);
-      await saveFile(blob, `track100-review-${r.year}.png`, {
-        title: t("review.cardTitle", { year: r.year }),
+      const blob = await drawReviewCard(yearReview, lang);
+      await saveFile(blob, `track100-review-${yearReview.year}.png`, {
+        title: t("review.cardTitle", { year: yearReview.year }),
         dialogTitle: t("share.dialogTitle"),
       });
-      // 用户取消分享由 saveFile 静默处理,不会走到 catch
     } catch {
       window.alert(t("share.failed"));
     } finally {
@@ -54,182 +80,155 @@ export default function ReviewPage() {
     }
   };
 
-  if (!hydrated) return <div className="p-6 text-text-secondary">{t("loading")}</div>;
+  if (!hydrated) return <ReviewSkeleton />;
 
   return (
-    <main className="px-5 pb-6 pt-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">{t("review.title")}</h1>
-        <button
-          onClick={onShare}
-          disabled={sharing}
-          aria-label={sharing ? t("share.generating") : t("review.share")}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-text-primary hover:bg-border/50 disabled:opacity-40"
-        >
-          <Share2 size={18} className={sharing ? "animate-pulse" : ""} />
-        </button>
-      </header>
-
-      {/* Year switcher */}
-      <div className="mt-4 flex items-center justify-center gap-6">
-        <button
-          onClick={() => prevYear && setYear(prevYear)}
-          disabled={prevYear === null}
-          aria-label={t("review.prevYear")}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-text-secondary disabled:opacity-30"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <span className="min-w-24 text-center text-2xl font-bold text-primary">{year}</span>
-        <button
-          onClick={() => nextYear && setYear(nextYear)}
-          disabled={nextYear === null}
-          aria-label={t("review.nextYear")}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-text-secondary disabled:opacity-30"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </div>
-
-      {/* Hero */}
-      <section
-        className="mt-4 rounded-card p-6 text-white shadow-card"
-        style={{ background: "linear-gradient(135deg, #556B2F 0%, #2C3A18 100%)" }}
-      >
-        <p className="text-sm opacity-80">{t("review.subtitle")}</p>
-        <div className="mt-1 text-6xl font-extrabold leading-tight">{r.litCells}</div>
-        <p className="text-lg font-semibold opacity-90">{t("review.cells")}</p>
-        <p className="mt-4 text-xs opacity-70">{t("review.footer")}</p>
-      </section>
-
-      {empty ? (
-        <div className="mt-10 flex flex-col items-center text-center">
-          <div className="text-5xl">🌱</div>
-          <h2 className="mt-4 text-base font-semibold">{t("review.empty")}</h2>
-          <p className="mt-1 text-sm text-text-secondary">{t("review.emptySub")}</p>
+    <main className="mx-auto flex h-[calc(100dvh-6rem)] max-w-app flex-col overflow-hidden px-5 pb-2 pt-6">
+      {/* header */}
+      <header className="flex shrink-0 items-start justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">{t("review.eyebrow")}</p>
+          <h1 className="mt-1 text-[26px] font-semibold tracking-tight text-text-primary">{t("review.title")}</h1>
         </div>
-      ) : (
-        <>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <StatCard label={t("review.checkIns")} value={r.checkIns} />
-            <StatCard label={t("review.activeDays")} value={r.activeDays} />
-            <StatCard label={t("review.longest")} value={`${r.longestStreak} ${t("unit.days")}`} />
-            <StatCard label={t("review.completed")} value={r.completed.length} />
-          </div>
-          <p className="mt-2 text-center text-xs text-text-secondary">
-            {t("review.activeGoals")} {r.activeGoals}
-          </p>
-
-          {/* Monthly */}
-          <section className="mt-6">
-            <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("review.monthly")}</h2>
-            <div className="rounded-card border border-border bg-surface p-4">
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={monthly}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} interval={0} />
-                  <Tooltip cursor={{ fill: "rgb(var(--border) / 0.3)" }} contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="rgb(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              {r.bestMonth !== null && (
-                <p className="mt-1 text-center text-xs text-text-secondary">
-                  {t("review.bestMonth", { month: r.bestMonth, n: r.monthly[r.bestMonth - 1].count })}
-                </p>
-              )}
-            </div>
-          </section>
-
-          {/* Year heatmap */}
-          <section className="mt-6">
-            <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("review.heat")}</h2>
-            <div className="no-scrollbar overflow-x-auto rounded-card border border-border bg-surface p-4">
-              <div className="grid w-max grid-flow-col grid-rows-7 gap-[3px]">
-                {r.heat.map((d) => (
-                  <div
-                    key={d.key}
-                    title={`${d.key} · ${d.count}`}
-                    className="h-3 w-3 rounded-[2px]"
-                    style={{
-                      backgroundColor: d.count > 0 ? "rgb(var(--primary))" : "rgb(var(--border) / 0.5)",
-                      opacity: d.count > 0 ? Math.min(1, 0.4 + d.count * 0.2) : 1,
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Focus + top goals */}
-          <section className="mt-6">
-            <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("review.topCategory")}</h2>
-            <div className="rounded-card border border-border bg-surface px-4 py-3 text-sm">
-              {r.topCategory
-                ? t("review.topCategoryValue", { name: t("cat." + r.topCategory.category), n: r.topCategory.count })
-                : t("review.none")}
-            </div>
-          </section>
-
-          {r.goalRanks.length > 0 && (
-            <section className="mt-6">
-              <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("review.goalRank")}</h2>
-              <div className="flex flex-col gap-2">
-                {r.goalRanks.slice(0, 5).map(({ goal, checkIns, cells }) => (
-                  <div key={goal.id} className="rounded-card border border-border bg-surface px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span>{goal.icon}</span>
-                      <span className="min-w-0 flex-1 truncate font-medium">{goal.title}</span>
-                      <span className="shrink-0 text-xs text-text-secondary">{checkIns} {t("u.times")}</span>
-                      <span className="shrink-0 text-sm font-bold" style={{ color: goal.color }}>
-                        {Math.round(cells)} {t("review.cells")}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-border/50">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${Math.min(100, (cells / Math.max(1, r.goalRanks[0].cells)) * 100)}%`, backgroundColor: goal.color }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {r.completed.length > 0 && (
-            <section className="mt-6">
-              <h2 className="mb-2 text-sm font-semibold text-text-secondary">{t("review.completedWall")}</h2>
-              <div className="flex flex-wrap gap-2">
-                {r.completed.map((g) => (
-                  <div key={g.id} className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm">
-                    <span>{g.icon}</span>
-                    <span className="max-w-40 truncate">{g.title}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
+        {period === "year" && (
           <button
             onClick={onShare}
             disabled={sharing}
-            className={cn(
-              "mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-btn bg-primary font-semibold text-white shadow-card active:scale-95 disabled:opacity-60",
-            )}
+            aria-label={sharing ? t("share.generating") : t("review.share")}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-surface text-text-secondary transition-colors hover:text-primary disabled:opacity-40"
           >
-            <Share2 size={18} className={sharing ? "animate-pulse" : ""} />
-            {sharing ? t("share.generating") : t("review.share")}
+            <Share2 size={17} className={sharing ? "animate-pulse" : ""} />
           </button>
-        </>
+        )}
+      </header>
+
+      {/* 周期 + 区间切换 */}
+      <div className="mt-4 shrink-0">
+        <div className="grid grid-cols-3 gap-1 rounded-full bg-border/30 p-1">
+          {PERIODS.map((p) => (
+            <button
+              key={p}
+              onClick={() => { setPeriod(p); setAnchor(new Date()); }}
+              className={cn(
+                "rounded-full py-1.5 text-xs font-semibold transition-all",
+                period === p ? "bg-surface text-primary shadow-sm" : "text-text-secondary hover:text-text-primary",
+              )}
+            >
+              {t(`review.period.${p}`)}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2.5 flex items-center justify-center gap-5">
+          <button onClick={goPrev} aria-label={t("review.prev")} className="flex h-7 w-7 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-border/30 active:scale-95">
+            <ChevronLeft size={17} />
+          </button>
+          <div className="flex items-center gap-1.5 text-primary">
+            <Sparkles size={14} />
+            <span className="min-w-32 text-center text-sm font-semibold tracking-wide">{title}</span>
+          </div>
+          <button onClick={goNext} disabled={!canGoNext(period, anchor)} aria-label={t("review.next")} className="flex h-7 w-7 items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-border/30 active:scale-95 disabled:opacity-25">
+            <ChevronRight size={17} />
+          </button>
+        </div>
+      </div>
+
+      {/* 通透 Hero */}
+      <section className="mt-4 shrink-0 rounded-card border border-border/70 bg-surface px-5 py-4">
+        <div className="text-center">
+          <p className="text-[11px] tracking-wide text-text-secondary">{t("review.subtitle")}</p>
+          <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
+            <span className="text-[44px] font-semibold leading-none tracking-tight text-primary tabular-nums">{review.litCells}</span>
+            <span className="text-sm font-medium text-text-primary">{t("review.cells")}</span>
+          </div>
+        </div>
+        <div className="mt-3.5 border-t border-border/60 pt-3">
+          <CellGrid lit={Math.min(100, review.litCells)} cols={25} gap="gap-1" />
+        </div>
+      </section>
+
+      {/* 数据行 */}
+      <div className="mt-2.5 grid shrink-0 grid-cols-4 gap-2">
+        <MiniStat icon={<Flame size={15} />} label={t("review.checkIns")} value={review.checkIns} accent />
+        <MiniStat icon={<CalendarCheck size={15} />} label={t("review.activeDays")} value={review.activeDays} />
+        <MiniStat icon={<Award size={15} />} label={t("review.longest")} value={`${review.longestStreak}${t("unit.days")}`} />
+        <MiniStat icon={<Target size={15} />} label={t("review.completed")} value={review.completed.length} />
+      </div>
+
+      {/* 分布图 —— 吃掉剩余空间 */}
+      <section className="mt-4 flex min-h-0 flex-1 flex-col">
+        <div className="mb-2 flex shrink-0 items-baseline justify-between">
+          <h2 className="text-sm font-semibold tracking-wide text-text-primary">{t("review.buckets")}</h2>
+          {review.bestBucket && (
+            <span className="flex items-center gap-1 text-[10px] text-text-secondary">
+              <Sparkles size={11} className="text-warning" />
+              {t("review.bestBucket", { label: review.bestBucket.label || review.bestBucket.key, n: review.bestBucket.count })}
+            </span>
+          )}
+        </div>
+        {empty ? (
+          <div className="flex min-h-[80px] flex-1 flex-col items-center justify-center rounded-card border border-border/70 bg-surface text-center">
+            <div className="text-3xl opacity-70">🌱</div>
+            <p className="mt-2 text-xs font-medium text-text-primary">{t("review.empty")}</p>
+            <p className="mt-0.5 text-[10px] text-text-secondary">{t("review.emptySub")}</p>
+          </div>
+        ) : (
+          <div className="min-h-[80px] flex-1 rounded-card border border-border/70 bg-surface px-2 py-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="reviewBar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgb(var(--primary))" stopOpacity={0.82} />
+                    <stop offset="100%" stopColor="rgb(var(--primary))" stopOpacity={0.25} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="name" tick={{ fontSize: 9, fill: "rgb(var(--text-secondary))" }} axisLine={false} tickLine={false} interval={0} minTickGap={12} />
+                <Tooltip cursor={{ fill: "rgb(var(--border) / 0.3)" }} contentStyle={tooltipStyle} />
+                <Bar dataKey="count" fill="url(#reviewBar)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
+      {/* 亮点摘要行 */}
+      {!empty && (
+        <div className="mt-3 grid shrink-0 grid-cols-3 gap-2 border-t border-border/50 pt-3">
+          <Highlight label={t("review.topCategory")} value={review.topCategory ? t("cat." + review.topCategory.category) : t("review.none")} />
+          <Highlight label={t("review.goalRank")} value={review.goalRanks[0] ? review.goalRanks[0].goal.title : t("review.none")} />
+          <Highlight label={t("review.completedWall")} value={String(review.completed.length)} />
+        </div>
       )}
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function MiniStat({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}) {
   return (
-    <div className="rounded-card border border-border bg-surface p-4">
-      <div className="text-sm text-text-secondary">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-text-primary">{value}</div>
+    <div className="rounded-2xl border border-border/70 bg-surface p-2.5">
+      <div className={cn("mx-auto mb-1.5 flex h-6 w-6 items-center justify-center rounded-lg", accent ? "bg-warning/12 text-warning" : "bg-primary/10 text-primary")}>
+        {icon}
+      </div>
+      <div className="truncate text-center text-base font-semibold tabular-nums leading-none tracking-tight text-text-primary">{value}</div>
+      <div className="mt-1 truncate text-center text-[9px] text-text-secondary">{label}</div>
+    </div>
+  );
+}
+
+function Highlight({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-border/25 px-2.5 py-2 text-center">
+      <div className="truncate text-[9px] text-text-secondary">{label}</div>
+      <div className="mt-0.5 truncate text-xs font-medium text-text-primary">{value}</div>
     </div>
   );
 }

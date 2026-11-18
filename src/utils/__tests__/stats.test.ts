@@ -78,4 +78,21 @@ describe("overview / byCategory / achievements", () => {
     const unlocked = achievements(goals, []).filter((b) => b.unlocked).map((b) => b.id);
     expect(unlocked).toEqual(["firstGoal", "firstDone"]);
   });
+
+  it("achievements 新维度:时段/连击/纯粹度不会误解锁", () => {
+    const unlocked = achievements(goals, []).filter((b) => b.unlocked).map((b) => b.id);
+    expect(unlocked).not.toContain("earlyBird");
+    expect(unlocked).not.toContain("nightOwl");
+    expect(unlocked).not.toContain("noBackfill");
+    expect(unlocked).not.toContain("fiveHundred");
+  });
+
+  it("成就携带进度 current/target", () => {
+    const tenGoals = Array.from({ length: 10 }, (_, i) => makeGoal({ id: `g${i}` }));
+    const badges = achievements(tenGoals, []);
+    const multitasker = badges.find((b) => b.id === "tenGoals")!;
+    expect(multitasker.unlocked).toBe(true);
+    expect(multitasker.current).toBe(10);
+    expect(multitasker.target).toBe(10);
+  });
 });

@@ -10,8 +10,10 @@ import { STORAGE_KEYS, readJSON, writeJSON } from "@/lib/storage";
 import {
   MIN_PENDING,
   TEST_NOTIFICATION_ID,
+  allReminderIds,
   isScheduleStale,
   nextTriggerSlots,
+  normalizeReminderTimes,
   reminderIds,
   type ReminderScheduleRecord,
 } from "@/lib/reminder-schedule";
@@ -65,6 +67,43 @@ export async function setShortcuts(items: ShortcutItem[]): Promise<void> {
 /** 监听快捷打卡;App 冷启动时的那次点击也会在注册后送达。返回取消监听函数。 */
 export function onShortcutCheckin(cb: (goalId: string) => void): () => void {
   return listen(() => Shortcuts.addListener("checkin", ({ goalId }) => cb(goalId)));
+}
+
+// ---- 桌面小组件 ----------------------------------------------------------
+interface WidgetGoal {
+  id: string;
+  title: string;
+  icon: string;
+  step: number;
+  current: number;
+  target: number;
+  color: string;
+}
+interface Track100WidgetPlugin {
+  syncGoals(options: { goals: WidgetGoal[] }): Promise<{ count: number }>;
+  drainPending(): Promise<{ items: { id: string; goalId: string; value: number; ts: number }[] }>;
+}
+const Track100Widget = registerPlugin<Track100WidgetPlugin>("Track100Widget");
+
+/** 把当前目标同步给桌面小组件(内部只取前 4 个进行中目标)。 */
+export async function syncWidgetGoals(goals: WidgetGoal[]): Promise<void> {
+  if (!isNative()) return;
+  try {
+    await Track100Widget.syncGoals({ goals: goals.slice(0, 4) });
+  } catch {
+    // 旧版本 APK 没有该插件,静默忽略
+  }
+}
+
+/** 取出小组件上累积的打卡,交给 JS 落地;失败返回空数组。 */
+export async function drainWidgetCheckins(): Promise<{ id: string; goalId: string; value: number; ts: number }[]> {
+  if (!isNative()) return [];
+  try {
+    const r = await Track100Widget.drainPending();
+    return Array.isArray(r?.items) ? r.items : [];
+  } catch {
+    return [];
+  }
 }
 
 function viaFileReader(blob: Blob): Promise<string> {
@@ -232,6 +271,8 @@ export interface ReminderHealth {
   pendingCount: number;
   nextAt: string | null;
   scheduledTime: string | null;
+  /** 当前排程的全部时段。 */
+  scheduledTimes: string[];
 }
 
 /** 所有排程操作串行化:设置页改时间 / App 启动 / 回前台可能同时触发,避免互相 cancel。 */
@@ -259,90 +300,110 @@ export async function requestNotificationPermission(): Promise<string> {
   return perm.display;
 }
 
-async function doSchedule(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+async function doSchedule(times: string[], lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
   const display = await requestNotificationPermission();
   // 关键:权限不通过时绝不先 cancel,否则会把已经排好的闹钟删光且不再排 → 彻底不响
   if (display !== "granted") return { ok: false, reason: "permission", display };
 
+  const normTimes = normalizeReminderTimes(times);
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   await registerCheckinAction(actionTitle);
-  const ids = reminderIds();
-  const slots = nextTriggerSlots(time, new Date());
 
-  // 顺便清掉 v1.4.1 及更早版本用的 id=1 cron 闹钟,否则覆盖安装后新旧两条提醒会同时响。
-  await LocalNotifications.cancel({ notifications: [...ids, LEGACY_REMINDER_ID].map((id) => ({ id })) });
-  await LocalNotifications.schedule({
-    notifications: slots.map((at, i) => ({
-      id: ids[i],
-      title: "Track100",
-      body,
-      schedule: { at, allowWhileIdle: true },
-      actionTypeId: CHECKIN_ACTION_TYPE,
-      extra: { kind: "daily" },
-    })),
+  // 每个时段各占一段 ID,先整体 cancel(含旧版 id=1 cron)再重排,避免残留旧时段。
+  const allIds = allReminderIds();
+  await LocalNotifications.cancel({ notifications: [...allIds, LEGACY_REMINDER_ID].map((id) => ({ id })) });
+
+  const notifications: {
+    id: number; title: string; body: string;
+    schedule: { at: Date; allowWhileIdle: boolean };
+    actionTypeId: string; extra: { kind: string };
+  }[] = [];
+  const now = new Date();
+  const firstSlots: Date[] = [];
+  normTimes.forEach((time, slot) => {
+    const ids = reminderIds(slot);
+    const slots = nextTriggerSlots(time, now);
+    slots.forEach((at, i) => {
+      notifications.push({
+        id: ids[i],
+        title: "Track100",
+        body,
+        schedule: { at, allowWhileIdle: true },
+        actionTypeId: CHECKIN_ACTION_TYPE,
+        extra: { kind: "daily" },
+      });
+    });
+    if (slots[0]) firstSlots.push(slots[0]);
   });
+  const earliest = firstSlots.length ? new Date(Math.min(...firstSlots.map((d) => d.getTime()))) : null;
+  await LocalNotifications.schedule({ notifications });
 
   const pending = await LocalNotifications.getPending();
-  const mine = pending.notifications.filter((n) => ids.includes(n.id));
+  const mine = pending.notifications.filter((n) => allIds.includes(n.id));
   if (mine.length === 0) return { ok: false, reason: "notScheduled", display };
   writeJSON<ReminderScheduleRecord>(STORAGE_KEYS.reminderSchedule, {
-    time,
+    times: normTimes,
+    time: normTimes[0],
     lang,
-    ids,
+    ids: allIds,
     scheduledAt: Date.now(),
   });
-  return { ok: true, count: mine.length, nextAt: slots[0]?.toISOString() ?? null, display };
+  return { ok: true, count: mine.length, nextAt: earliest?.toISOString() ?? null, display };
 }
 
-/** 设置变化 / 手动重排:强制重新排程。 */
-export function scheduleDailyReminders(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+/** 设置变化 / 手动重排:强制重新排程。times 兼容旧的单字符串调用。 */
+export function scheduleDailyReminders(times: string[] | string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
   if (!isNative()) return Promise.resolve({ ok: false, reason: "error" });
-  return serializeReminder(() => doSchedule(time, lang, body, actionTitle));
+  const arr = Array.isArray(times) ? times : [times];
+  return serializeReminder(() => doSchedule(arr, lang, body, actionTitle));
 }
 
-async function doEnsure(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+async function doEnsure(times: string[], lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
   const rec = readSchedule();
-  if (isScheduleStale(rec, time, lang)) return doSchedule(time, lang, body, actionTitle);
+  if (isScheduleStale(rec, times, lang)) return doSchedule(times, lang, body, actionTitle);
   const { LocalNotifications } = await import("@capacitor/local-notifications");
-  const ids = reminderIds();
+  const ids = allReminderIds();
   try {
     const pending = await LocalNotifications.getPending();
     const mine = pending.notifications.filter((n) => ids.includes(n.id));
-    if (mine.length < MIN_PENDING) return doSchedule(time, lang, body, actionTitle); // 被系统清掉或快用完
+    // 每个时段至少要留 MIN_PENDING 条;有任一时段快用完就整体重排
+    const perSlotMin = normalizeReminderTimes(times).length * MIN_PENDING;
+    if (mine.length < perSlotMin) return doSchedule(times, lang, body, actionTitle);
     return { ok: true, count: mine.length, nextAt: null };
   } catch {
-    return doSchedule(time, lang, body, actionTitle);
+    return doSchedule(times, lang, body, actionTitle);
   }
 }
 
 /** App 启动 / 回前台:只在没排上或设置变了时补排,不打扰已排好的闹钟。 */
-export function ensureDailyReminders(time: string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
+export function ensureDailyReminders(times: string[] | string, lang: string, body: string, actionTitle: string): Promise<ReminderStatus> {
   if (!isNative()) return Promise.resolve({ ok: false, reason: "error" });
-  return serializeReminder(() => doEnsure(time, lang, body, actionTitle));
+  const arr = Array.isArray(times) ? times : [times];
+  return serializeReminder(() => doEnsure(arr, lang, body, actionTitle));
 }
 
 export function cancelDailyReminders(): Promise<void> {
   if (!isNative()) return Promise.resolve();
   return serializeReminder(async () => {
     const { LocalNotifications } = await import("@capacitor/local-notifications");
-    await LocalNotifications.cancel({ notifications: [...reminderIds(), LEGACY_REMINDER_ID].map((id) => ({ id })) });
+    await LocalNotifications.cancel({ notifications: [...allReminderIds(), LEGACY_REMINDER_ID].map((id) => ({ id })) });
     writeJSON<null>(STORAGE_KEYS.reminderSchedule, null);
   });
 }
 
 /** 设置页自检:权限 / 精确闹钟 / 电池优化 / 实际排上的通知与下次触发时间。 */
-export async function checkReminderHealth(time?: string): Promise<ReminderHealth> {
-  if (!isNative()) {
-    return {
-      native: false,
-      display: typeof Notification === "undefined" ? "unsupported" : Notification.permission,
-      exactAlarm: "unsupported",
-      batteryOptimized: null,
-      pendingCount: 0,
-      nextAt: null,
-      scheduledTime: null,
-    };
-  }
+export async function checkReminderHealth(times?: string[] | string): Promise<ReminderHealth> {
+  const empty: ReminderHealth = {
+    native: false,
+    display: typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+    exactAlarm: "unsupported",
+    batteryOptimized: null,
+    pendingCount: 0,
+    nextAt: null,
+    scheduledTime: null,
+    scheduledTimes: [],
+  };
+  if (!isNative()) return empty;
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   const [perm, exact, pending, power] = await Promise.all([
     LocalNotifications.checkPermissions().catch(() => ({ display: "unknown" })),
@@ -350,16 +411,24 @@ export async function checkReminderHealth(time?: string): Promise<ReminderHealth
     LocalNotifications.getPending().catch(() => ({ notifications: [] })),
     DeviceSettings.diagnostics().catch(() => null),
   ]);
-  const ids = reminderIds();
+  const ids = allReminderIds();
   const mine = pending.notifications.filter((n) => ids.includes(n.id));
   const rec = readSchedule();
-  const effectiveTime = time ?? rec?.time ?? null;
+  const effectiveTimes = normalizeReminderTimes(
+    times !== undefined
+      ? (Array.isArray(times) ? times : [times])
+      : (rec?.times ?? (rec?.time ? [rec.time] : [])),
+  );
   // 插件把 at 以 Java Date 塞进 JSONObject,各 ROM 序列化出的字符串不一定能被 JS 解析。
   // 所以「下次提醒」直接由设置推导;getPending 只用来确认闹钟确实排上了。
-  const nextAt =
-    mine.length > 0 && effectiveTime
-      ? (nextTriggerSlots(effectiveTime, new Date())[0]?.toISOString() ?? null)
-      : null;
+  let nextAt: string | null = null;
+  if (mine.length > 0) {
+    const now = new Date();
+    for (const t of effectiveTimes) {
+      const slot = nextTriggerSlots(t, now)[0];
+      if (slot && (!nextAt || slot.toISOString() < nextAt)) nextAt = slot.toISOString();
+    }
+  }
   return {
     native: true,
     display: perm.display,
@@ -368,6 +437,7 @@ export async function checkReminderHealth(time?: string): Promise<ReminderHealth
     pendingCount: mine.length,
     nextAt,
     scheduledTime: rec?.time ?? null,
+    scheduledTimes: rec?.times ?? (rec?.time ? [rec.time] : []),
   };
 }
 

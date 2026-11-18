@@ -8,6 +8,18 @@ def appVersionCode = appVersion.tokenize('.').collect { it.toInteger() }.with { 
 android {
     namespace "com.track100.app"
     compileSdk rootProject.ext.compileSdkVersion
+
+    // release 包复用 Android 默认 debug keystore 签名,保证可安装、可与 debug 包互相覆盖。
+    // 这是本地分发用的自签名,不是上架密钥;将来上架再替换为正式 keystore。
+    signingConfigs {
+        release {
+            storeFile file("${System.properties['user.home']}/.android/debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
     defaultConfig {
         applicationId "com.track100.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -23,6 +35,7 @@ android {
     }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
