@@ -14,3 +14,24 @@ export function formatDateTime(iso: string): string {
   const d = new Date(iso);
   return `${dayKey(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+export interface YearProgress {
+  /** 今天是今年第几天(1-based,1 月 1 日为 1)。 */
+  dayOfYear: number;
+  /** 今年还剩几天(不含今天,12 月 31 日为 0)。 */
+  daysLeft: number;
+  /** 今年总天数(平年 365/闰年 366)。 */
+  totalDays: number;
+  year: number;
+}
+
+/** 年度进度:按本地时间算今天是第几天、还剩几天,自动处理闰年。 */
+export function yearProgress(now: Date = new Date()): YearProgress {
+  const year = now.getFullYear();
+  const start = new Date(year, 0, 1).getTime();
+  const today = new Date(year, now.getMonth(), now.getDate()).getTime();
+  const nextStart = new Date(year + 1, 0, 1).getTime();
+  const totalDays = Math.round((nextStart - start) / 86400000);
+  const dayOfYear = Math.round((today - start) / 86400000) + 1;
+  return { dayOfYear, daysLeft: totalDays - dayOfYear, totalDays, year };
+}

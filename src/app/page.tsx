@@ -10,6 +10,7 @@ import { CATEGORIES } from "@/lib/goal-meta";
 import { cellsLit, isComplete, pickCheckinGoal, sortGoals } from "@/utils/progress";
 import { currentStreak, todayCheckIns } from "@/utils/streak";
 import { bestStreak, goalsPendingToday, journeyDay, weeklySummary } from "@/utils/insights";
+import { yearProgress } from "@/utils/date";
 import { getDailyCheer } from "@/lib/encouragement";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n";
@@ -61,6 +62,9 @@ export default function HomePage() {
   const streak = useMemo(() => currentStreak(history), [history]);
   const todayCount = useMemo(() => todayCheckIns(history), [history]);
   const dayNo = useMemo(() => journeyDay(goals, history), [goals, history]);
+  // 年度进度依赖"今天":仅客户端 hydrate 后计算,避免静态导出预渲染时把构建日期写进 HTML 导致 hydration 不一致。
+  const now = useMemo(() => (hydrated ? new Date() : null), [hydrated]);
+  const year = useMemo(() => (now ? yearProgress(now) : null), [now]);
   const best = useMemo(() => bestStreak(history), [history]);
   const weekly = useMemo(() => weeklySummary(goals, history), [goals, history]);
   const pending = useMemo(() => goalsPendingToday(goals, history), [goals, history]);
@@ -99,13 +103,40 @@ export default function HomePage() {
       {/* Progress-first hero */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-secondary">{t(greetKey())} 👋</p>
-        {dayNo > 0 && (
-          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-            {t("home.journeyDay", { n: dayNo })}
-          </span>
-        )}
       </div>
-      <h1 className="mt-2 text-base text-text-secondary">
+
+      {/* 年度进度:日期 / 今年第几天 / 还剩几天 —— 一行三段,醒目且信息密度高 */}
+      {now && year && (
+        <div className="mt-3 flex items-stretch overflow-hidden rounded-card border border-primary/15 bg-primary/[0.05]">
+          <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5">
+            <span className="truncate text-base font-bold leading-tight text-text-primary">
+              {t("home.yearDate", lang === "zh"
+                ? { m: now.getMonth() + 1, d: now.getDate() }
+                : { mon: now.toLocaleString("en", { month: "short" }), d: now.getDate() })}
+            </span>
+            <span className="mt-0.5 truncate text-[11px] text-text-secondary">
+              {new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", { weekday: "short" }).format(now)}
+              {dayNo > 0 && ` · ${t("home.journeyDay", { n: dayNo })}`}
+            </span>
+          </div>
+          <div className="my-2.5 w-px shrink-0 bg-primary/15" />
+          <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5">
+            <span className="truncate text-base font-bold leading-tight text-primary">
+              {t("home.yearDay", { n: year.dayOfYear })}
+            </span>
+            <span className="mt-0.5 truncate text-[11px] text-text-secondary">{t("home.yearDaySub")}</span>
+          </div>
+          <div className="my-2.5 w-px shrink-0 bg-primary/15" />
+          <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2.5">
+            <span className="truncate text-base font-bold leading-tight text-text-primary">
+              {t("home.yearLeft", { n: year.daysLeft })}
+            </span>
+            <span className="mt-0.5 truncate text-[11px] text-text-secondary">{t("home.yearLeftSub")}</span>
+          </div>
+        </div>
+      )}
+
+      <h1 className="mt-3 text-base text-text-secondary">
         {t("home.heroPrefix")}
         <AnimatedNumber value={litCells} className="mx-2 text-4xl font-bold text-primary" />
         {t("home.heroSuffix")}
