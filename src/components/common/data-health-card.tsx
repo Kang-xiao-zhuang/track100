@@ -6,30 +6,29 @@ import { useSettingsStore } from "@/store/settings.store";
 import { useGoalStore } from "@/store/goal.store";
 import { useT } from "@/lib/i18n";
 import { autoBackupStatus } from "@/lib/backup";
-import { STORAGE_QUOTA, formatBytes, storageUsage } from "@/lib/storage";
+import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, readJSON, storageUsage } from "@/lib/storage";
 import { cn } from "@/lib/cn";
 
 const DAY = 86400000;
 
-/** 设置页的「数据健康」入口行：默认收起,点击展开备份/存储/提醒/回收站详情。 */
+/** 设置页的「数据健康」入口行：默认收起,点击展开备份/存储/回收站详情。 */
 export function DataHealthCard({ onExport }: { onExport: () => void }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const hydrated = useSettingsStore((s) => s.hydrated);
-  const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
-  const notifDenied = useSettingsStore((s) => s.reminderEnabled) && typeof Notification !== "undefined" && Notification.permission === "denied";
   const goals = useGoalStore((s) => s.goals);
   const auto = useMemo(() => autoBackupStatus(), [hydrated]);
   const usage = useMemo(() => storageUsage(), [hydrated]);
   const trash = goals.filter((g) => g.deletedAt).length;
 
+  const lastExport = readJSON<number>(STORAGE_KEYS.lastExport, 0);
+  const exportDays = lastExport > 0 ? Math.floor((Date.now() - lastExport) / DAY) : null;
   const backupDays = auto.supported && auto.at > 0 ? Math.floor((Date.now() - auto.at) / DAY) : null;
   const storagePct = Math.round((usage / STORAGE_QUOTA) * 100);
   const backupOk = auto.supported && backupDays !== null && backupDays < 14;
   const storageOk = storagePct < 80;
-  const remindOk = reminderEnabled && !notifDenied;
   const trashOk = trash === 0;
-  const allOk = backupOk && storageOk && remindOk && trashOk;
+  const allOk = backupOk && storageOk && trashOk;
 
   const backupText = !auto.supported
     ? t("set.autoBackupWeb")
@@ -73,16 +72,14 @@ export function DataHealthCard({ onExport }: { onExport: () => void }) {
               sub={formatBytes(usage)}
               ok={storageOk}
             />
-            <Cell
-              label={t("set.healthRemind")}
-              value={reminderEnabled ? t("set.healthRemindOn") : t("set.healthRemindOff")}
-              ok={remindOk}
-            />
             <Cell label={t("set.healthTrash")} value={String(trash)} ok={trashOk} icon={<Trash2 size={12} />} />
           </div>
+          <p className="mt-3 text-center text-[11px] text-text-secondary">
+            {t("set.lastExport", { when: exportDays === null ? t("set.never") : t("set.healthBackupDays", { n: exportDays }) })}
+          </p>
           <button
             onClick={onExport}
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-btn border border-primary/30 py-2 text-xs font-medium text-primary active:opacity-70"
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-btn border border-primary/30 py-2 text-xs font-medium text-primary active:opacity-70"
           >
             <Download size={13} /> {t("set.export")}
           </button>

@@ -7,10 +7,8 @@ export const STORAGE_KEYS = {
   settings: "track100-settings",
   achievements: "track100-achievements",
   lastExport: "track100-last-export",
-  lastRemind: "track100-last-remind",
   snapshot: "track100-snapshot",
   lastAutoBackup: "track100-last-auto-backup",
-  reminderSchedule: "track100-reminder-schedule",
   /** 已弹过庆祝卡的成就 id,避免每次打开重复弹。 */
   celebratedAchievements: "track100-celebrated-achievements",
 } as const;

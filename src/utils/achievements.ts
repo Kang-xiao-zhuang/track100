@@ -39,6 +39,8 @@ export function achievements(goals: Goal[], history: ProgressRecord[]): Badge[] 
   const checkInCount = checkIns.length;
   const st = streak(history);
   const best = longestStreak(history);
+  // 历史累计活跃天数(去重)—— 时间型里程碑的口径,断签也不会倒退。
+  const activeDays = new Set(history.filter((r) => r.value > 0).map((r) => dayKey(r.createdAt))).size;
 
   // 时段:按本地时间的打卡分布
   let early = 0;
@@ -67,5 +69,9 @@ export function achievements(goals: Goal[], history: ProgressRecord[]): Badge[] 
     { id: "allRounder", icon: "🎨", unlocked: cats.size >= 5, current: cats.size, target: 5 },
     { id: "noBackfill", icon: "⏱️", unlocked: checkInCount >= 50 && backfilled === 0 },
     { id: "completeFive", icon: "🎖️", unlocked: completed >= 5, current: completed, target: 5 },
+    // 时间型长期里程碑:累计活跃 30/100/365 天,断签不倒退,给长期坚持一个持续的目标。
+    { id: "days30", icon: "🗓️", unlocked: activeDays >= 30, current: activeDays, target: 30 },
+    { id: "days100", icon: "💎", unlocked: activeDays >= 100, current: activeDays, target: 100 },
+    { id: "days365", icon: "👑", unlocked: activeDays >= 365, current: activeDays, target: 365 },
   ];
 }

@@ -22,6 +22,7 @@ import { SharePreview } from "@/components/common/share-preview";
 import { cn } from "@/lib/cn";
 import { ReviewSkeleton } from "@/components/common/skeleton";
 import { CellGrid } from "@/components/common/cell-grid";
+import { ActivityHeatmap } from "@/components/common/activity-heatmap";
 
 const tooltipStyle = {
   background: "rgb(var(--surface))",
@@ -219,6 +220,26 @@ export default function ReviewPage() {
           </div>
         )}
       </section>
+
+      {/* 年度热力图:整年的打卡轨迹,一眼看到坚持的密度 */}
+      {period === "year" && yearReview && (
+        <section className="mt-4 rounded-card border border-border/70 bg-surface p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold tracking-wide text-text-primary">{t("review.heatmap.title")}</h2>
+            <span className="text-[10px] text-text-secondary">
+              {t("review.heatmap.sub", { days: yearReview.activeDays })}
+            </span>
+          </div>
+          <ActivityHeatmap
+            heat={yearReview.heat}
+            css={accent.css}
+            grid={accent.grid}
+            legendLess={t("review.heatmap.less")}
+            legendMore={t("review.heatmap.more")}
+            empty={t("review.heatmap.empty")}
+          />
+        </section>
+      )}
 
       {/* 亮点摘要行 */}
       {!empty && (

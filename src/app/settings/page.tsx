@@ -2,16 +2,15 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Bell, Download, Globe, LayoutGrid, Moon, Palette, Plus, RotateCcw, Sun, Trash2, Trophy, Upload, X } from "lucide-react";
+import { Archive, Download, Globe, LayoutGrid, Moon, Palette, RotateCcw, Sun, Trash2, Trophy, Upload } from "lucide-react";
 import { useSettingsStore } from "@/store/settings.store";
 import { useGoalStore } from "@/store/goal.store";
 import { STORAGE_KEYS, STORAGE_QUOTA, formatBytes, storageUsage, writeJSON } from "@/lib/storage";
-import { autoBackupStatus, buildBackup, mergeBackup, parseBackup, restoreSnapshot, snapshotAt } from "@/lib/backup";
+import { autoBackupStatus, buildBackup, mergeBackup, parseBackup, previewBackup, replaceBackup, restoreSnapshot, snapshotAt, type BackupData, type BackupPreview } from "@/lib/backup";
 import { useT } from "@/lib/i18n";
 import { dayKey } from "@/utils/date";
 import { isComplete } from "@/utils/progress";
-import { isNative, requestNotificationPermission, saveFile } from "@/lib/native";
-import { ReminderHealthPanel } from "@/components/system/reminder-health";
+import { saveFile } from "@/lib/native";
 import { SettingsSkeleton } from "@/components/common/skeleton";
 import { ViewStylePicker } from "@/components/common/view-style-picker";
 import { AccentPicker } from "@/components/common/accent-picker";
@@ -31,10 +30,6 @@ export default function SettingsPage() {
   const accentSat = useSettingsStore((s) => s.accentSat);
   const accentLight = useSettingsStore((s) => s.accentLight);
   const toggleLanguage = useSettingsStore((s) => s.toggleLanguage);
-  const reminderEnabled = useSettingsStore((s) => s.reminderEnabled);
-  const reminderTimes = useSettingsStore((s) => s.reminderTimes);
-  const setReminder = useSettingsStore((s) => s.setReminder);
-  const setReminderTimes = useSettingsStore((s) => s.setReminderTimes);
   const goals = useGoalStore((s) => s.goals);
   const restoreGoal = useGoalStore((s) => s.restoreGoal);
   const purgeGoal = useGoalStore((s) => s.purgeGoal);
@@ -43,6 +38,7 @@ export default function SettingsPage() {
   const [openList, setOpenList] = useState<"trash" | "archived" | null>(null);
   const [showViews, setShowViews] = useState(false);
   const [showAccent, setShowAccent] = useState(false);
+  const [pendingImport, setPendingImport] = useState<{ data: BackupData; preview: BackupPreview } | null>(null);
   const homeView = useSettingsStore((s) => s.homeView) ?? "classic";
   const { t, lang } = useT();
   const router = useRouter();
@@ -56,25 +52,6 @@ export default function SettingsPage() {
   const finishedCount = useMemo(() => goals.filter((g) => isComplete(g) && !g.deletedAt).length, [goals]);
 
   if (!hydrated) return <SettingsSkeleton />;
-
-  const toggleReminder = async () => {
-    if (!reminderEnabled) {
-      // 在用户手势里申请权限最可靠;被拒时仍打开开关,由自检面板显示原因并引导去系统设置,
-      // 用户授权后回前台会自动补排(ensureDailyReminders 检测到没有 pending 会重排)。
-      if (isNative()) {
-        const perm = await requestNotificationPermission().catch(() => "unknown");
-        if (perm !== "granted") window.alert(t("remind.permBlocked"));
-      } else if (typeof Notification !== "undefined" && Notification.permission === "default") {
-        await Notification.requestPermission();
-      }
-      setReminder(true);
-    } else {
-      setReminder(false);
-    }
-  };
-
-  const notifDenied =
-    reminderEnabled && !isNative() && typeof Notification !== "undefined" && Notification.permission === "denied";
 
   const autoLabel = !auto.supported
     ? t("set.autoBackupWeb")
@@ -93,17 +70,31 @@ export default function SettingsPage() {
     writeJSON(STORAGE_KEYS.lastExport, Date.now()); // 记录备份时间,清掉首页提醒
   };
 
-  // 导入 = 严格校验 + 按 id 合并(不覆盖) + 自动留快照;任何失败都不动本地数据。
+  // 导入先解析 + 预览,不立刻写入;由用户在确认弹层里选「合并」或「覆盖恢复」。
   const onImport = async (file: File) => {
     try {
       const data = parseBackup(await file.text());
-      const r = mergeBackup(data);
-      window.alert(t("import.merged", { goals: r.addedGoals, records: r.addedRecords }));
-      window.location.href = "/";
+      setPendingImport({ data, preview: previewBackup(data) });
     } catch (e) {
       const key = e instanceof Error ? e.message : "import.invalid";
       window.alert(t("import.failed") + t(key));
     }
+  };
+
+  const confirmMerge = () => {
+    if (!pendingImport) return;
+    const r = mergeBackup(pendingImport.data);
+    setPendingImport(null);
+    window.alert(t("import.merged", { goals: r.addedGoals, records: r.addedRecords }));
+    window.location.href = "/";
+  };
+
+  const confirmReplace = () => {
+    if (!pendingImport) return;
+    if (!window.confirm(t("import.replaceConfirm"))) return;
+    replaceBackup(pendingImport.data);
+    setPendingImport(null);
+    window.location.href = "/";
   };
 
   const onRestoreSnapshot = () => {
@@ -181,63 +172,6 @@ export default function SettingsPage() {
           icon={<Globe size={18} />}
           onClick={toggleLanguage}
         />
-        <Divider />
-        <div className="flex items-center gap-3 px-4 py-3.5">
-          <span className="text-text-secondary"><Bell size={18} /></span>
-          <span className="flex-1 text-text-primary">{t("set.reminder")}</span>
-          <button
-            role="switch"
-            aria-checked={reminderEnabled}
-            onClick={toggleReminder}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${reminderEnabled ? "bg-primary" : "bg-border"}`}
-          >
-            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${reminderEnabled ? "left-[22px]" : "left-0.5"}`} />
-          </button>
-        </div>
-        {reminderEnabled && (
-          <div className="border-t border-border/60 px-4 py-3">
-            <p className="mb-2 text-xs text-text-secondary">{t("set.reminderTimesHint")}</p>
-            <div className="flex flex-col gap-2">
-              {(reminderTimes ?? []).map((time, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-5 text-xs text-text-secondary">{i + 1}</span>
-                  <input
-                    type="time"
-                    value={time}
-                    onChange={(e) => {
-                      const next = [...(reminderTimes ?? [])];
-                      next[i] = e.target.value;
-                      setReminderTimes(next);
-                    }}
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
-                  />
-                  {(reminderTimes?.length ?? 0) > 1 && (
-                    <button
-                      onClick={() => setReminderTimes((reminderTimes ?? []).filter((_, j) => j !== i))}
-                      aria-label={t("set.removeTime")}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-secondary hover:bg-danger/10 hover:text-danger"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {(reminderTimes?.length ?? 0) < 3 && (
-              <button
-                onClick={() => {
-                  const suggestions = ["08:00", "12:30", "21:30", "07:00", "18:00"];
-                  const candidate = suggestions.find((s) => !(reminderTimes ?? []).includes(s)) ?? "09:00";
-                  setReminderTimes([...(reminderTimes ?? []), candidate]);
-                }}
-                className="mt-2 flex items-center gap-1.5 text-sm font-medium text-primary"
-              >
-                <Plus size={15} /> {t("set.addTime")}
-              </button>
-            )}
-          </div>
-        )}
-        {notifDenied && <p className="px-4 pb-3 text-xs text-danger">{t("set.reminderDenied")}</p>}
         <Divider />
         <Row label={t("set.export")} icon={<Download size={18} />} onClick={onExport} />
         <Divider />
@@ -322,8 +256,6 @@ export default function SettingsPage() {
 
       <DataHealthCard onExport={onExport} />
 
-      <ReminderHealthPanel />
-
       <section className="mt-4 overflow-hidden rounded-card border border-border bg-surface">
         <Row label={t("set.about")} value={t("set.aboutSub")} />
         <Divider />
@@ -343,7 +275,90 @@ export default function SettingsPage() {
           e.target.value = "";
         }}
       />
+
+      {pendingImport && (
+        <ImportConfirm
+          preview={pendingImport.preview}
+          onClose={() => setPendingImport(null)}
+          onMerge={confirmMerge}
+          onReplace={confirmReplace}
+        />
+      )}
     </main>
+  );
+}
+
+/** 导入前预览:让用户看清这份备份有多少数据、和本机的差异,再决定合并还是覆盖。 */
+function ImportConfirm({
+  preview,
+  onClose,
+  onMerge,
+  onReplace,
+}: {
+  preview: BackupPreview;
+  onClose: () => void;
+  onMerge: () => void;
+  onReplace: () => void;
+}) {
+  const { t } = useT();
+  const dateText = preview.exportedAt
+    ? new Date(preview.exportedAt).toLocaleString()
+    : t("import.unknownTime");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("import.title")}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-modal border border-border bg-surface p-5"
+      >
+        <h2 className="text-lg font-semibold text-text-primary">{t("import.title")}</h2>
+        <p className="mt-1 text-xs text-text-secondary">{t("import.sub")}</p>
+
+        <div className="mt-4 rounded-xl bg-border/25 p-3">
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="text-text-secondary">{t("import.exported")}</span>
+            <span className="text-text-primary">{dateText}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="rounded-lg bg-surface px-3 py-2">
+              <div className="text-[11px] text-text-secondary">{t("import.goals")}</div>
+              <div className="mt-0.5 text-lg font-semibold tabular-nums text-text-primary">{preview.goalCount}</div>
+              <div className="text-[10px] text-primary">{t("import.new", { n: preview.newGoals })}</div>
+            </div>
+            <div className="rounded-lg bg-surface px-3 py-2">
+              <div className="text-[11px] text-text-secondary">{t("import.records")}</div>
+              <div className="mt-0.5 text-lg font-semibold tabular-nums text-text-primary">{preview.recordCount}</div>
+              <div className="text-[10px] text-primary">{t("import.new", { n: preview.newRecords })}</div>
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
+            {t("import.localNow", { goals: preview.localGoals, records: preview.localRecords })}
+          </p>
+        </div>
+
+        <button
+          onClick={onMerge}
+          className="mt-4 h-11 w-full rounded-btn bg-primary text-sm font-semibold text-white dark:text-background"
+        >
+          {t("import.doMerge")}
+        </button>
+        <p className="mt-1 text-center text-[10px] text-text-secondary">{t("import.mergeHint")}</p>
+
+        <button
+          onClick={onReplace}
+          className="mt-3 h-11 w-full rounded-btn border border-border text-sm font-medium text-text-primary"
+        >
+          {t("import.doReplace")}
+        </button>
+        <p className="mt-1 text-center text-[10px] text-text-secondary">{t("import.replaceHint")}</p>
+
+        <button onClick={onClose} className="mt-3 w-full py-1 text-xs text-text-secondary">
+          {t("import.cancel")}
+        </button>
+      </div>
+    </div>
   );
 }
 

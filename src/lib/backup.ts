@@ -60,8 +60,6 @@ const settingsSchema = z
     growthMode: z.enum(["grid", "ring", "bar", "tree", "heatmap"]).optional(),
     homeView: z.enum(["classic", "grid", "compact", "minimal", "matrix", "tile", "bars", "gauge"]).optional(),
     language: z.enum(["zh", "en"]).optional(),
-    reminderEnabled: z.boolean().optional(),
-    reminderTime: z.string().optional(),
   })
   .passthrough()
   .optional();
@@ -171,11 +169,53 @@ export interface MergeResult {
   addedRecords: number;
 }
 
+/** 导入前给用户看的摘要 —— 只读计算,不动任何数据。 */
+export interface BackupPreview {
+  exportedAt: string | null;
+  goalCount: number;
+  recordCount: number;
+  /** 与本机已有的 id 比对后的净新增数量(合并方式实际会写入的量)。 */
+  newGoals: number;
+  newRecords: number;
+  hasSettings: boolean;
+  localGoals: number;
+  localRecords: number;
+}
+
+export function previewBackup(data: BackupData): BackupPreview {
+  const localGoals = readJSON<Goal[]>(STORAGE_KEYS.goals, []);
+  const localRecords = readJSON<ProgressRecord[]>(STORAGE_KEYS.history, []);
+  const gIds = new Set(localGoals.map((g) => g.id));
+  const rIds = new Set(localRecords.map((r) => r.id));
+  return {
+    exportedAt: data.exportedAt ?? null,
+    goalCount: data.goals.length,
+    recordCount: data.history.length,
+    newGoals: data.goals.filter((g) => !gIds.has(g.id)).length,
+    newRecords: data.history.filter((r) => !rIds.has(r.id)).length,
+    hasSettings: !!data.settings && Object.keys(data.settings).length > 0,
+    localGoals: localGoals.length,
+    localRecords: localRecords.length,
+  };
+}
+
+/** 覆盖式恢复(换机场景):用备份整体替换本机数据,连同设置与成就。调用前必须已向用户确认。 */
+export function replaceBackup(data: BackupData): void {
+  takeSnapshot(); // 覆盖前仍留一份可一键回滚的快照
+  writeJSON(STORAGE_KEYS.goals, data.goals);
+  writeJSON(STORAGE_KEYS.history, sortNewestFirst(data.history));
+  writeJSON(STORAGE_KEYS.achievements, data.achievements ?? []);
+  if (data.settings && Object.keys(data.settings).length > 0) {
+    writeJSON(STORAGE_KEYS.settings, data.settings);
+  }
+  flushWrites();
+}
+
 /**
  * 按 id 合并而非覆盖:
  * - goals:同 id 取 updatedAt 较新者(软删除也是一次更新,不会被旧备份"复活")
  * - history:按 id 并集,重新排序
- * - settings:刻意忽略(主题/语言/提醒是设备偏好)
+ * - settings:刻意忽略(主题/语言等是设备偏好)
  */
 export function mergeBackup(data: BackupData): MergeResult {
   takeSnapshot();

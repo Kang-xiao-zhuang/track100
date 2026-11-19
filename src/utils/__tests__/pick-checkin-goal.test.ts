@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickCheckinGoal } from "@/utils/reminder";
+import { pickCheckinGoal } from "@/utils/progress";
 import { makeGoal, rec } from "./fixtures";
 
 const today = new Date().toISOString();

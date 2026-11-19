@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useGoalStore } from "@/store/goal.store";
 import { useSettingsStore } from "@/store/settings.store";
-import { PwaReminder } from "@/components/system/pwa-reminder";
+import { PwaRegister } from "@/components/system/pwa-register";
 import { NativeBridge } from "@/components/system/native-bridge";
 import { AutoBackup } from "@/components/system/auto-backup";
 import { StorageWarning } from "@/components/system/storage-warning";
@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative mx-auto min-h-screen max-w-app bg-background shadow-sm">
-      <PwaReminder />
+      <PwaRegister />
       <NativeBridge />
       <AutoBackup />
       <CheckinToast />

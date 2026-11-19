@@ -6,7 +6,6 @@ import {
   canvasToPngBlob,
   createCardCanvas,
   drawBrandHeader,
-  drawCellBand,
   drawFooter,
   drawPaper,
   fitText,
@@ -74,16 +73,53 @@ export async function drawReviewCard(
       ctx.fillText(fitText(ctx, label, boxW - 24, { size: 26, minSize: 18, weight: 400, family: CARD.font }), bx + boxW / 2, 756);
     });
 
-    // 细格子带:100 格代表一年节奏,少于 100 按实际点亮,超过则满格(文案说明总量)
-    const lit = Math.min(100, r.litCells);
+    // 全年热力图:取代细格子带,一眼看到这一年的坚持密度
     ctx.fillStyle = CARD.muted;
     ctx.font = `400 26px ${CARD.font}`;
-    const bandLabel =
-      r.litCells > 100
-        ? translate(lang, "review.cardRounds", { n: Math.ceil(r.litCells / 100) })
-        : translate(lang, "share.cardGrid", { n: r.litCells });
-    ctx.fillText(fitText(ctx, bandLabel, W - 200, { size: 26, minSize: 20, weight: 400, family: CARD.font }), W / 2, 878);
-    drawCellBand(ctx, lit, 100, W / 2, 920, W - 260, 20, p.accent);
+    ctx.fillText(
+      fitText(ctx, translate(lang, "review.cardHeat", { days: r.activeDays }), W - 200, {
+        size: 26, minSize: 20, weight: 400, family: CARD.font,
+      }),
+      W / 2,
+      880,
+    );
+    if (r.heat.length > 0) {
+      const cell = 14;
+      const pitch = 18;
+      const lead = new Date(`${r.heat[0].key}T12:00:00`).getDay();
+      const padded: ({ key: string; count: number } | null)[] = [
+        ...Array.from({ length: lead }, () => null),
+        ...r.heat,
+      ];
+      while (padded.length % 7 !== 0) padded.push(null);
+      const cols: ({ key: string; count: number } | null)[][] = [];
+      for (let i = 0; i < padded.length; i += 7) cols.push(padded.slice(i, i + 7));
+      const gridW = cols.length * pitch - (pitch - cell);
+      const x0 = Math.max(60, (W - gridW) / 2);
+      const y0 = 910;
+      const shownMonths = new Set<number>();
+      cols.forEach((col, ci) => {
+        col.forEach((day, di) => {
+          if (!day) return;
+          const month = Number(day.key.slice(5, 7));
+          ctx.globalAlpha = day.count === 0 ? 1 : day.count === 1 ? 0.45 : day.count <= 3 ? 0.72 : 1;
+          ctx.fillStyle = day.count === 0 ? CARD.cellOff : p.accent;
+          roundRect(ctx, x0 + ci * pitch, y0 + di * pitch, cell, cell, 4);
+          ctx.fill();
+          // 每月第一列上方标月份
+          if (di === 0 && !shownMonths.has(month)) {
+            shownMonths.add(month);
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = CARD.muted;
+            ctx.font = `400 20px ${CARD.font}`;
+            ctx.textAlign = "left";
+            ctx.fillText(String(month), x0 + ci * pitch, y0 - 12);
+            ctx.textAlign = "center";
+          }
+        });
+      });
+      ctx.globalAlpha = 1;
+    }
 
     // 年度结果:浅底胶囊徽章,与三栏数据卡同一套视觉语言,避免孤立黑字
     if (r.completed.length > 0) {
@@ -96,7 +132,7 @@ export async function drawReviewCard(
       const bw = Math.min(W - 200, ctx.measureText(label).width + 96);
       const bh = 68;
       const bx = (W - bw) / 2;
-      const by = 990;
+      const by = 1100;
       ctx.fillStyle = p.accentSoft;
       roundRect(ctx, bx, by, bw, bh, bh / 2);
       ctx.fill();

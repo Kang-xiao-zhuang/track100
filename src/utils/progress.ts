@@ -1,4 +1,5 @@
-import type { Goal } from "@/types/goal";
+import type { Goal, ProgressRecord } from "@/types/goal";
+import { dayKey } from "@/utils/date";
 
 /** 0..1 completion ratio, clamped. */
 export function ratio(current: number, target: number): number {
@@ -56,4 +57,23 @@ export function shortcutGoals(goals: Goal[], max = 4): Goal[] {
     .filter((g) => !g.archived && !g.deletedAt && !isComplete(g))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, max);
+}
+
+/**
+ * 首页「今日 +1」作用于哪个目标:
+ * 只看可见且未完成的目标;优先今天还没有正向打卡记录的,按最近更新排序。
+ * 若所有目标今天都已打卡,返回 null —— 宁可提示,也不误加。
+ */
+export function pickCheckinGoal(goals: Goal[], history: ProgressRecord[], now = new Date()): Goal | null {
+  const candidates = goals.filter((g) => !g.archived && !g.deletedAt && !isComplete(g));
+  if (candidates.length === 0) return null;
+
+  const today = dayKey(now);
+  const checkedToday = new Set(
+    history.filter((r) => r.value > 0 && dayKey(r.createdAt) === today).map((r) => r.goalId),
+  );
+  const pending = candidates.filter((g) => !checkedToday.has(g.id));
+  if (pending.length === 0) return null;
+
+  return [...pending].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
 }
